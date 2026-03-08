@@ -18,6 +18,7 @@ using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Nodes.Cards;
 using MegaCrit.Sts2.Core.Nodes.Cards.Holders;
+using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Rewards;
@@ -26,6 +27,7 @@ using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Nodes.Relics;
 using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
+using MegaCrit.Sts2.Core.Nodes.Screens.TreasureRoomRelic;
 using MegaCrit.Sts2.Core.Rewards;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -86,8 +88,19 @@ public static partial class McpMod
         {
             if (CombatManager.Instance.IsInProgress)
             {
-                result["state_type"] = combatRoom.RoomType.ToString().ToLower(); // monster, elite, boss
-                result["battle"] = BuildBattleState(runState, combatRoom);
+                // Check for in-combat hand card selection (e.g., "Select a card to exhaust")
+                var playerHand = NPlayerHand.Instance;
+                if (playerHand != null && playerHand.IsInCardSelection)
+                {
+                    result["state_type"] = "hand_select";
+                    result["hand_select"] = BuildHandSelectState(playerHand, runState);
+                    result["battle"] = BuildBattleState(runState, combatRoom);
+                }
+                else
+                {
+                    result["state_type"] = combatRoom.RoomType.ToString().ToLower(); // monster, elite, boss
+                    result["battle"] = BuildBattleState(runState, combatRoom);
+                }
             }
             else
             {
@@ -145,6 +158,12 @@ public static partial class McpMod
             }
             else
             {
+                // Auto-open the shopkeeper's inventory if not already open
+                var merchUI = NMerchantRoom.Instance;
+                if (merchUI != null && !merchUI.Inventory.IsOpen)
+                {
+                    merchUI.OpenInventory();
+                }
                 result["state_type"] = "shop";
                 result["shop"] = BuildShopState(merchantRoom, runState);
             }
@@ -162,10 +181,18 @@ public static partial class McpMod
                 result["rest_site"] = BuildRestSiteState(restSiteRoom, runState);
             }
         }
-        else if (currentRoom is TreasureRoom)
+        else if (currentRoom is TreasureRoom treasureRoom)
         {
-            result["state_type"] = "treasure";
-            result["message"] = "Player is in a treasure room.";
+            if (NMapScreen.Instance is { IsOpen: true })
+            {
+                result["state_type"] = "map";
+                result["map"] = BuildMapState(runState);
+            }
+            else
+            {
+                result["state_type"] = "treasure";
+                result["treasure"] = BuildTreasureState(treasureRoom, runState);
+            }
         }
         else
         {
@@ -919,25 +946,35 @@ public static partial class McpMod
         state["cards"] = cards;
 
         // Preview container showing? (selection complete, awaiting confirm)
-        var previewContainer = screen.GetNodeOrNull<Godot.Control>("%PreviewContainer");
-        bool previewShowing = previewContainer?.Visible ?? false;
+        // Upgrade screens use UpgradeSinglePreviewContainer / UpgradeMultiPreviewContainer
+        var previewSingle = screen.GetNodeOrNull<Godot.Control>("%UpgradeSinglePreviewContainer");
+        var previewMulti = screen.GetNodeOrNull<Godot.Control>("%UpgradeMultiPreviewContainer");
+        var previewGeneric = screen.GetNodeOrNull<Godot.Control>("%PreviewContainer");
+        bool previewShowing = (previewSingle?.Visible ?? false)
+                            || (previewMulti?.Visible ?? false)
+                            || (previewGeneric?.Visible ?? false);
         state["preview_showing"] = previewShowing;
 
         // Button states
         var closeButton = screen.GetNodeOrNull<NBackButton>("%Close");
         state["can_cancel"] = closeButton?.IsEnabled ?? false;
 
-        // Confirm button — check main then preview
+        // Confirm button — search all preview containers and main screen
         bool canConfirm = false;
-        var mainConfirm = screen.GetNodeOrNull<NConfirmButton>("Confirm")
-                          ?? screen.GetNodeOrNull<NConfirmButton>("%Confirm");
-        if (mainConfirm?.IsEnabled == true) canConfirm = true;
-
-        if (previewShowing)
+        foreach (var container in new[] { previewSingle, previewMulti, previewGeneric })
         {
-            var previewConfirm = previewContainer?.GetNodeOrNull<NConfirmButton>("Confirm")
-                                 ?? previewContainer?.GetNodeOrNull<NConfirmButton>("%PreviewConfirm");
-            if (previewConfirm?.IsEnabled == true) canConfirm = true;
+            if (container?.Visible == true)
+            {
+                var confirm = container.GetNodeOrNull<NConfirmButton>("Confirm")
+                              ?? container.GetNodeOrNull<NConfirmButton>("%PreviewConfirm");
+                if (confirm?.IsEnabled == true) { canConfirm = true; break; }
+            }
+        }
+        if (!canConfirm)
+        {
+            var mainConfirm = screen.GetNodeOrNull<NConfirmButton>("Confirm")
+                              ?? screen.GetNodeOrNull<NConfirmButton>("%Confirm");
+            if (mainConfirm?.IsEnabled == true) canConfirm = true;
         }
         state["can_confirm"] = canConfirm;
 
@@ -996,6 +1033,81 @@ public static partial class McpMod
         return state;
     }
 
+    private static Dictionary<string, object?> BuildHandSelectState(NPlayerHand hand, RunState runState)
+    {
+        var state = new Dictionary<string, object?>();
+
+        // Mode
+        state["mode"] = hand.CurrentMode switch
+        {
+            NPlayerHand.Mode.SimpleSelect => "simple_select",
+            NPlayerHand.Mode.UpgradeSelect => "upgrade_select",
+            _ => hand.CurrentMode.ToString()
+        };
+
+        // Prompt text from %SelectionHeader
+        var headerLabel = hand.GetNodeOrNull<Godot.Control>("%SelectionHeader");
+        if (headerLabel != null)
+        {
+            var textVariant = headerLabel.Get("text");
+            string? prompt = textVariant.VariantType != Godot.Variant.Type.Nil
+                ? StripRichTextTags(textVariant.AsString())
+                : null;
+            state["prompt"] = prompt;
+        }
+
+        // Selectable cards (visible holders in the hand)
+        var selectableCards = new List<Dictionary<string, object?>>();
+        int index = 0;
+        foreach (var holder in hand.ActiveHolders)
+        {
+            var card = holder.CardModel;
+            if (card == null) continue;
+
+            selectableCards.Add(new Dictionary<string, object?>
+            {
+                ["index"] = index,
+                ["id"] = card.Id.Entry,
+                ["name"] = SafeGetText(() => card.Title),
+                ["type"] = card.Type.ToString(),
+                ["cost"] = card.EnergyCost.CostsX ? "X" : card.EnergyCost.GetAmountToSpend().ToString(),
+                ["description"] = SafeGetCardDescription(card),
+                ["is_upgraded"] = card.IsUpgraded,
+                ["keywords"] = BuildHoverTips(card.HoverTips)
+            });
+            index++;
+        }
+        state["cards"] = selectableCards;
+
+        // Already-selected cards (in the SelectedHandCardContainer)
+        var selectedContainer = hand.GetNodeOrNull<Godot.Control>("%SelectedHandCardContainer");
+        if (selectedContainer != null)
+        {
+            var selectedCards = new List<Dictionary<string, object?>>();
+            var selectedHolders = FindAll<NSelectedHandCardHolder>(selectedContainer);
+            int selIdx = 0;
+            foreach (var holder in selectedHolders)
+            {
+                var card = holder.CardModel;
+                if (card == null) continue;
+                selectedCards.Add(new Dictionary<string, object?>
+                {
+                    ["index"] = selIdx,
+                    ["name"] = SafeGetText(() => card.Title)
+                });
+                selIdx++;
+            }
+            if (selectedCards.Count > 0)
+                state["selected_cards"] = selectedCards;
+        }
+
+        // Confirm button state
+        var confirmBtn = hand.GetNodeOrNull<NConfirmButton>("%SelectModeConfirmButton");
+        state["can_confirm"] = confirmBtn?.IsEnabled ?? false;
+
+        return state;
+    }
+
     private static Dictionary<string, object?> BuildRelicSelectState(NChooseARelicSelection screen, RunState runState)
     {
         var state = new Dictionary<string, object?>();
@@ -1036,6 +1148,73 @@ public static partial class McpMod
 
         var skipButton = screen.GetNodeOrNull<NClickableControl>("SkipButton");
         state["can_skip"] = skipButton?.IsEnabled == true && skipButton.Visible;
+
+        return state;
+    }
+
+    private static Dictionary<string, object?> BuildTreasureState(TreasureRoom treasureRoom, RunState runState)
+    {
+        var state = new Dictionary<string, object?>();
+
+        var player = LocalContext.GetMe(runState);
+        if (player != null)
+        {
+            state["player"] = new Dictionary<string, object?>
+            {
+                ["character"] = SafeGetText(() => player.Character.Title),
+                ["hp"] = player.Creature.CurrentHp,
+                ["max_hp"] = player.Creature.MaxHp,
+                ["gold"] = player.Gold
+            };
+        }
+
+        var treasureUI = FindFirst<NTreasureRoom>(
+            ((Godot.SceneTree)Godot.Engine.GetMainLoop()).Root);
+
+        if (treasureUI == null)
+        {
+            state["message"] = "Treasure room loading...";
+            return state;
+        }
+
+        // Auto-open chest if not yet opened
+        var chestButton = treasureUI.GetNodeOrNull<NClickableControl>("Chest");
+        if (chestButton is { IsEnabled: true })
+        {
+            chestButton.ForceClick();
+            state["message"] = "Opening chest...";
+            return state;
+        }
+
+        // Show relics available for picking
+        var relicCollection = treasureUI.GetNodeOrNull<NTreasureRoomRelicCollection>("%RelicCollection");
+        if (relicCollection?.Visible == true)
+        {
+            var holders = FindAll<NTreasureRoomRelicHolder>(relicCollection)
+                .Where(h => h.IsEnabled && h.Visible)
+                .ToList();
+
+            var relics = new List<Dictionary<string, object?>>();
+            int index = 0;
+            foreach (var holder in holders)
+            {
+                var relic = holder.Relic?.Model;
+                if (relic == null) continue;
+                relics.Add(new Dictionary<string, object?>
+                {
+                    ["index"] = index,
+                    ["id"] = relic.Id.Entry,
+                    ["name"] = SafeGetText(() => relic.Title),
+                    ["description"] = SafeGetText(() => relic.DynamicDescription),
+                    ["rarity"] = relic.Rarity.ToString(),
+                    ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
+                });
+                index++;
+            }
+            state["relics"] = relics;
+        }
+
+        state["can_proceed"] = treasureUI.ProceedButton?.IsEnabled ?? false;
 
         return state;
     }

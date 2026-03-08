@@ -10,12 +10,14 @@ using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Nodes.Relics;
 using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
+using MegaCrit.Sts2.Core.Nodes.Screens.TreasureRoomRelic;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Nodes.Events;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Nodes.RestSite;
+using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Rewards;
 using MegaCrit.Sts2.Core.Combat;
@@ -59,8 +61,11 @@ public static partial class McpMod
             "select_card" => ExecuteSelectCard(data),
             "confirm_selection" => ExecuteConfirmSelection(),
             "cancel_selection" => ExecuteCancelSelection(),
+            "combat_select_card" => ExecuteCombatSelectCard(data),
+            "combat_confirm_selection" => ExecuteCombatConfirmSelection(),
             "select_relic" => ExecuteSelectRelic(data),
             "skip_relic_selection" => ExecuteSkipRelicSelection(),
+            "claim_treasure_relic" => ExecuteClaimTreasureRelic(data),
             _ => Error($"Unknown action: {action}")
         };
     }
@@ -299,6 +304,11 @@ public static partial class McpMod
         if (player.RunState.CurrentRoom is not MerchantRoom merchantRoom)
             return Error("Not in a shop");
 
+        // Auto-open inventory if needed
+        var merchUI = NMerchantRoom.Instance;
+        if (merchUI != null && !merchUI.Inventory.IsOpen)
+            merchUI.OpenInventory();
+
         if (!data.TryGetValue("index", out var indexElem))
             return Error("Missing 'index' (shop item index)");
 
@@ -458,11 +468,29 @@ public static partial class McpMod
             return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Proceeding from rest site" };
         }
 
-        // Try merchant
-        if (NMerchantRoom.Instance is { } merchRoom && merchRoom.ProceedButton.IsEnabled)
+        // Try merchant — close inventory first if open, then proceed
+        if (NMerchantRoom.Instance is { } merchRoom)
         {
-            merchRoom.ProceedButton.ForceClick();
-            return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Proceeding from shop" };
+            if (merchRoom.Inventory.IsOpen)
+            {
+                var backBtn = FindFirst<NBackButton>(merchRoom);
+                if (backBtn is { IsEnabled: true })
+                    backBtn.ForceClick();
+            }
+            if (merchRoom.ProceedButton.IsEnabled)
+            {
+                merchRoom.ProceedButton.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Proceeding from shop" };
+            }
+        }
+
+        // Try treasure room
+        var treasureUI = FindFirst<NTreasureRoom>(
+            ((Godot.SceneTree)Godot.Engine.GetMainLoop()).Root);
+        if (treasureUI != null && treasureUI.ProceedButton.IsEnabled)
+        {
+            treasureUI.ProceedButton.ForceClick();
+            return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Proceeding from treasure room" };
         }
 
         return Error("No proceed button available or enabled");
@@ -525,20 +553,24 @@ public static partial class McpMod
         if (overlay is not NCardGridSelectionScreen screen)
             return Error("No card selection screen is open");
 
-        // Check preview confirm first (transform/upgrade preview)
-        var previewContainer = screen.GetNodeOrNull<Godot.Control>("%PreviewContainer");
-        if (previewContainer?.Visible == true)
+        // Check all preview containers (upgrade uses UpgradeSinglePreviewContainer / UpgradeMultiPreviewContainer,
+        // NDeckCardSelectScreen uses PreviewContainer with %PreviewConfirm)
+        foreach (var containerName in new[] { "%UpgradeSinglePreviewContainer", "%UpgradeMultiPreviewContainer", "%PreviewContainer" })
         {
-            var previewConfirm = previewContainer.GetNodeOrNull<NConfirmButton>("Confirm")
-                                 ?? previewContainer.GetNodeOrNull<NConfirmButton>("%PreviewConfirm");
-            if (previewConfirm is { IsEnabled: true })
+            var container = screen.GetNodeOrNull<Godot.Control>(containerName);
+            if (container?.Visible == true)
             {
-                previewConfirm.ForceClick();
-                return new Dictionary<string, object?>
+                var confirm = container.GetNodeOrNull<NConfirmButton>("Confirm")
+                              ?? container.GetNodeOrNull<NConfirmButton>("%PreviewConfirm");
+                if (confirm is { IsEnabled: true })
                 {
-                    ["status"] = "ok",
-                    ["message"] = "Confirming selection from preview"
-                };
+                    confirm.ForceClick();
+                    return new Dictionary<string, object?>
+                    {
+                        ["status"] = "ok",
+                        ["message"] = "Confirming selection from preview"
+                    };
+                }
             }
         }
 
@@ -582,19 +614,22 @@ public static partial class McpMod
             return Error("No card selection screen is open");
 
         // If preview is showing, cancel back to selection
-        var previewContainer = screen.GetNodeOrNull<Godot.Control>("%PreviewContainer");
-        if (previewContainer?.Visible == true)
+        foreach (var containerName in new[] { "%UpgradeSinglePreviewContainer", "%UpgradeMultiPreviewContainer", "%PreviewContainer" })
         {
-            var previewCancel = previewContainer.GetNodeOrNull<NBackButton>("Cancel")
-                                ?? previewContainer.GetNodeOrNull<NBackButton>("%PreviewCancel");
-            if (previewCancel is { IsEnabled: true })
+            var container = screen.GetNodeOrNull<Godot.Control>(containerName);
+            if (container?.Visible == true)
             {
-                previewCancel.ForceClick();
-                return new Dictionary<string, object?>
+                var cancelBtn = container.GetNodeOrNull<NBackButton>("Cancel")
+                                ?? container.GetNodeOrNull<NBackButton>("%PreviewCancel");
+                if (cancelBtn is { IsEnabled: true })
                 {
-                    ["status"] = "ok",
-                    ["message"] = "Cancelling preview — returning to card selection"
-                };
+                    cancelBtn.ForceClick();
+                    return new Dictionary<string, object?>
+                    {
+                        ["status"] = "ok",
+                        ["message"] = "Cancelling preview — returning to card selection"
+                    };
+                }
             }
         }
 
@@ -611,6 +646,52 @@ public static partial class McpMod
         }
 
         return Error("No cancel/close button is currently enabled — selection may be mandatory");
+    }
+
+    private static Dictionary<string, object?> ExecuteCombatSelectCard(Dictionary<string, JsonElement> data)
+    {
+        var hand = NPlayerHand.Instance;
+        if (hand == null || !hand.IsInCardSelection)
+            return Error("No in-combat card selection is active");
+
+        if (!data.TryGetValue("card_index", out var indexElem))
+            return Error("Missing 'card_index' (index of the card in hand)");
+
+        int index = indexElem.GetInt32();
+        var holders = hand.ActiveHolders;
+        if (index < 0 || index >= holders.Count)
+            return Error($"Card index {index} out of range ({holders.Count} selectable cards)");
+
+        var holder = holders[index];
+        string cardName = SafeGetText(() => holder.CardModel?.Title) ?? "unknown";
+
+        // Emit the Pressed signal — same path the game UI uses
+        holder.EmitSignal(NCardHolder.SignalName.Pressed, holder);
+
+        return new Dictionary<string, object?>
+        {
+            ["status"] = "ok",
+            ["message"] = $"Selecting card from hand: {cardName}"
+        };
+    }
+
+    private static Dictionary<string, object?> ExecuteCombatConfirmSelection()
+    {
+        var hand = NPlayerHand.Instance;
+        if (hand == null || !hand.IsInCardSelection)
+            return Error("No in-combat card selection is active");
+
+        var confirmBtn = hand.GetNodeOrNull<NConfirmButton>("%SelectModeConfirmButton");
+        if (confirmBtn == null || !confirmBtn.IsEnabled)
+            return Error("Confirm button is not enabled — select more cards first");
+
+        confirmBtn.ForceClick();
+
+        return new Dictionary<string, object?>
+        {
+            ["status"] = "ok",
+            ["message"] = "Confirming combat card selection"
+        };
     }
 
     private static Dictionary<string, object?> ExecuteSelectRelic(Dictionary<string, JsonElement> data)
@@ -655,6 +736,40 @@ public static partial class McpMod
         {
             ["status"] = "ok",
             ["message"] = "Skipping relic selection"
+        };
+    }
+
+    private static Dictionary<string, object?> ExecuteClaimTreasureRelic(Dictionary<string, JsonElement> data)
+    {
+        var treasureUI = FindFirst<NTreasureRoom>(
+            ((Godot.SceneTree)Godot.Engine.GetMainLoop()).Root);
+        if (treasureUI == null)
+            return Error("Treasure room is not open");
+
+        var relicCollection = treasureUI.GetNodeOrNull<NTreasureRoomRelicCollection>("%RelicCollection");
+        if (relicCollection?.Visible != true)
+            return Error("Relic collection is not visible — chest may not be opened yet");
+
+        if (!data.TryGetValue("index", out var indexElem))
+            return Error("Missing 'index' (relic index)");
+
+        int index = indexElem.GetInt32();
+
+        var holders = FindAll<NTreasureRoomRelicHolder>(relicCollection)
+            .Where(h => h.IsEnabled && h.Visible)
+            .ToList();
+
+        if (index < 0 || index >= holders.Count)
+            return Error($"Relic index {index} out of range ({holders.Count} relics available)");
+
+        var holder = holders[index];
+        string relicName = SafeGetText(() => holder.Relic?.Model?.Title) ?? "unknown";
+        holder.ForceClick();
+
+        return new Dictionary<string, object?>
+        {
+            ["status"] = "ok",
+            ["message"] = $"Claiming treasure relic: {relicName}"
         };
     }
 

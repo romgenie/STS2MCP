@@ -1,6 +1,6 @@
 # Raw API Reference
 
-These API endpoints are available for direct HTTP requests *without* using the MCP server. For example, you can use `curl` or Postman to interact with the mod directly at `http://localhost:15526/api/v1/singleplayer`. 
+These API endpoints are available for direct HTTP requests *without* using the MCP server. For example, you can use `curl` or Postman to interact with the mod directly at `http://localhost:15526/api/v1/singleplayer`.
 
 :::note
 These endpoints are designed for local use and do not have authentication or security measures, so they should not be exposed publicly - unless you know what you're doing!
@@ -15,19 +15,33 @@ Query parameters:
 
 Returns the current game state. The `state_type` field indicates the screen:
 - `monster` / `elite` / `boss` — In combat (full battle state returned)
+- `hand_select` — In-combat card selection prompt (exhaust, discard, etc.) with battle state
 - `combat_rewards` — Post-combat rewards screen (reward items, proceed button)
 - `card_reward` — Card reward selection screen (card choices, skip option)
 - `map` — Map navigation screen (full DAG, next options with lookahead, visited path)
 - `rest_site` — Rest site (available options: rest, smith, etc.)
 - `shop` — Shop (full inventory: cards, relics, potions, card removal with costs)
 - `event` — Event or Ancient (options with descriptions, ancient dialogue detection)
-- `card_select` — Deck card selection (transform, upgrade, remove, discard)
-- `treasure` — Treasure room (stub for now)
+- `card_select` — Deck card selection (transform, upgrade, remove, discard) or choose-a-card (potions, effects)
+- `relic_select` — Relic choice screen (boss relics, immediate pick + skip)
+- `treasure` — Treasure room (chest auto-opens, relic claiming)
+- `overlay` — Catch-all for unhandled overlay screens (prevents soft-locks)
 - `menu` — No run in progress
+
+### State details
 
 **Battle state includes:**
 - Player: HP, block, energy, stars (Regent), gold, character, powers, relics, potions, hand (with card details including star costs), pile counts, orbs
 - Enemies: entity_id, name, HP, block, powers, intents with labels
+- Keywords on all entities (cards, relics, potions, powers)
+
+**Hand select state includes:**
+- Mode: `simple_select` (exhaust/discard) or `upgrade_select` (in-combat upgrade)
+- Prompt text (e.g., "Select a card to Exhaust.")
+- Selectable cards: index, id, name, type, cost, description, upgrade status, keywords
+- Already-selected cards (if multi-select): index, name
+- Confirm button state
+- Full battle state is also included for combat context
 
 **Rewards state includes:**
 - Player summary: character, HP, gold, potion slot availability
@@ -37,7 +51,7 @@ Returns the current game state. The `state_type` field indicates the screen:
 **Event state includes:**
 - Event metadata: id, name, whether it's an Ancient, dialogue phase status
 - Player summary: character, HP, gold
-- Options: index, title, description, locked/proceed/chosen status, attached relic (for Ancients)
+- Options: index, title, description, locked/proceed/chosen status, attached relic (for Ancients), keywords
 
 **Rest site state includes:**
 - Player summary: character, HP, gold
@@ -46,8 +60,9 @@ Returns the current game state. The `state_type` field indicates the screen:
 
 **Shop state includes:**
 - Player summary: character, HP, gold, potion slot availability
-- Full inventory by category: cards (with details, cost, on_sale), relics, potions, card removal
+- Full inventory by category: cards (with details, cost, on_sale, keywords), relics (with keywords), potions (with keywords), card removal
 - Each item: index, cost, stocked status, affordability
+- Shop inventory is auto-opened when state is queried
 
 **Map state includes:**
 - Player summary: character, HP, gold, potion slot availability
@@ -56,17 +71,30 @@ Returns the current game state. The `state_type` field indicates the screen:
 - Full map DAG: all nodes with coordinates, types, and edges (children)
 
 **Card select state includes:**
-- Screen type: `transform`, `upgrade`, `select`, `simple_select`
+- Screen type: `transform`, `upgrade`, `select`, `simple_select`, `choose`
 - Player summary: character, HP, gold
 - Prompt text (e.g., "Choose 2 cards to Transform.")
 - Cards: index, id, name, type, cost, description, rarity, upgrade status, keywords
 - Preview state, confirm/cancel button availability
+- For `choose` type (e.g., Colorless Potion): immediate pick on select, skip availability
+
+**Relic select state includes:**
+- Prompt text
+- Player summary: character, HP, gold
+- Relics: index, id, name, description, keywords
+- Skip availability
 
 **Card reward state includes:**
 - Card choices: index, id, name, type, energy cost, star cost (Regent), description, rarity, upgrade status, keywords
 - Skip availability
 
-### `POST /api/v1/singleplayer`
+**Treasure state includes:**
+- Player summary: character, HP, gold
+- Relics: index, id, name, description, rarity, keywords
+- Proceed button state
+- Chest is auto-opened when state is queried
+
+## `POST /api/v1/singleplayer`
 
 **Play a card:**
 ```json
@@ -95,6 +123,20 @@ Returns the current game state. The `state_type` field indicates the screen:
 { "action": "end_turn" }
 ```
 
+**Select a card from hand during combat selection:**
+```json
+{ "action": "combat_select_card", "card_index": 0 }
+```
+- `card_index`: 0-based index of the card in the selectable hand (from GET response)
+- Used when a card effect prompts "Select a card to exhaust/discard/etc."
+
+**Confirm in-combat card selection:**
+```json
+{ "action": "combat_confirm_selection" }
+```
+- Confirms the current in-combat hand card selection
+- Only works when the confirm button is enabled (enough cards selected)
+
 **Claim a reward:**
 ```json
 { "action": "claim_reward", "index": 0 }
@@ -114,12 +156,13 @@ Returns the current game state. The `state_type` field indicates the screen:
 { "action": "skip_card_reward" }
 ```
 
-**Proceed from rewards:**
+**Proceed:**
 ```json
 { "action": "proceed" }
 ```
-- Proceeds from the rewards screen to the map
-- Any unclaimed rewards are skipped
+- Proceeds from the current screen to the map
+- Works from: rewards screen, rest site, shop (auto-closes inventory), treasure room
+- Does NOT work for events — use `choose_event_option` with the Proceed option's index
 
 **Choose a rest site option:**
 ```json
@@ -134,6 +177,7 @@ Returns the current game state. The `state_type` field indicates the screen:
 ```
 - `index`: 0-based index of the item in the shop inventory (from GET response)
 - Item must be stocked and affordable
+- Shop inventory is auto-opened if not already open
 
 **Choose an event option:**
 ```json
@@ -156,26 +200,48 @@ Returns the current game state. The `state_type` field indicates the screen:
 - `index`: 0-based index from the `next_options` array in the map state
 - Node types: Monster, Elite, Boss, RestSite, Shop, Treasure, Unknown, Ancient
 
-**Select a card in the deck selection grid:**
+**Select a card in the selection screen:**
 ```json
 { "action": "select_card", "index": 0 }
 ```
 - `index`: 0-based index of the card in the grid (from GET response)
-- Toggles selection — call again to deselect
-- When enough cards are selected, a preview may appear automatically
+- For grid screens (transform, upgrade, select): toggles selection. When enough cards are selected, a preview may appear automatically
+- For choose-a-card screens (potions, effects): picks immediately
 
 **Confirm card selection:**
 ```json
 { "action": "confirm_selection" }
 ```
 - Confirms the current selection (from preview or main confirm button)
+- Works with upgrade previews (single and multi), transform previews, and generic confirm buttons
+- Not needed for choose-a-card screens where picking is immediate
 
 **Cancel card selection:**
 ```json
 { "action": "cancel_selection" }
 ```
-- If preview is showing, goes back to the selection grid
+- If a preview is showing (upgrade/transform), goes back to the selection grid
+- For choose-a-card screens, clicks the skip button (if available)
 - Otherwise, closes the card selection screen (only if cancellation is allowed)
+
+**Select a relic:**
+```json
+{ "action": "select_relic", "index": 0 }
+```
+- `index`: 0-based index of the relic (from GET response)
+- Used for boss relic selection. Pick is immediate.
+
+**Skip relic selection:**
+```json
+{ "action": "skip_relic_selection" }
+```
+
+**Claim a treasure relic:**
+```json
+{ "action": "claim_treasure_relic", "index": 0 }
+```
+- `index`: 0-based index of the relic (from GET response)
+- Chest is auto-opened when state is queried; this claims a revealed relic
 
 ### Error responses
 
@@ -186,4 +252,3 @@ All errors return:
   "error": "Description of what went wrong"
 }
 ```
-

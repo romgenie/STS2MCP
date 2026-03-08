@@ -62,6 +62,11 @@ public static partial class McpMod
             FormatCardRewardMarkdown(sb, cardReward);
         }
 
+        if (state.TryGetValue("hand_select", out var handSelectObj) && handSelectObj is Dictionary<string, object?> handSelect)
+        {
+            FormatHandSelectMarkdown(sb, handSelect);
+        }
+
         if (state.TryGetValue("card_select", out var cardSelectObj) && cardSelectObj is Dictionary<string, object?> cardSelect)
         {
             FormatCardSelectMarkdown(sb, cardSelect);
@@ -70,6 +75,11 @@ public static partial class McpMod
         if (state.TryGetValue("relic_select", out var relicSelectObj) && relicSelectObj is Dictionary<string, object?> relicSelect)
         {
             FormatRelicSelectMarkdown(sb, relicSelect);
+        }
+
+        if (state.TryGetValue("treasure", out var treasureObj) && treasureObj is Dictionary<string, object?> treasureData)
+        {
+            FormatTreasureMarkdown(sb, treasureData);
         }
 
         if (state.TryGetValue("overlay", out var overlayObj) && overlayObj is Dictionary<string, object?> overlayData)
@@ -447,6 +457,42 @@ public static partial class McpMod
         sb.AppendLine();
     }
 
+    private static void FormatHandSelectMarkdown(StringBuilder sb, Dictionary<string, object?> handSelect)
+    {
+        sb.AppendLine("## In-Combat Card Selection");
+
+        if (handSelect.TryGetValue("prompt", out var promptObj) && promptObj != null)
+            sb.AppendLine($"*{promptObj}*");
+        sb.AppendLine();
+
+        string mode = handSelect.TryGetValue("mode", out var m) ? m?.ToString() ?? "simple_select" : "simple_select";
+        if (mode == "upgrade_select")
+            sb.AppendLine("**Mode:** Upgrade selection");
+        sb.AppendLine();
+
+        if (handSelect.TryGetValue("cards", out var cardsObj) && cardsObj is List<Dictionary<string, object?>> cards && cards.Count > 0)
+        {
+            sb.AppendLine("### Selectable Cards");
+            foreach (var card in cards)
+            {
+                sb.AppendLine($"- [{card["index"]}] **{card["name"]}** ({card["cost"]} energy) [{card["type"]}] — {card["description"]}");
+            }
+            sb.AppendLine();
+        }
+
+        if (handSelect.TryGetValue("selected_cards", out var selObj) && selObj is List<Dictionary<string, object?>> selected && selected.Count > 0)
+        {
+            sb.AppendLine("### Already Selected");
+            foreach (var card in selected)
+                sb.AppendLine($"- {card["name"]}");
+            sb.AppendLine();
+        }
+
+        bool canConfirm = handSelect.TryGetValue("can_confirm", out var cc) && cc is true;
+        sb.AppendLine($"Use `combat_select_card(card_index)` to select. Can confirm: {(canConfirm ? "Yes — use `combat_confirm_selection`" : "No — select more cards")}");
+        sb.AppendLine();
+    }
+
     private static void FormatCardSelectMarkdown(StringBuilder sb, Dictionary<string, object?> cardSelect)
     {
         string screenType = cardSelect.TryGetValue("screen_type", out var st) ? st?.ToString() ?? "select" : "select";
@@ -490,6 +536,38 @@ public static partial class McpMod
             sb.AppendLine("**Preview is showing** — use `confirm_selection` to confirm or `cancel_selection` to go back.");
         else
             sb.AppendLine($"**Select cards** using `select_card(index)`. Can confirm: {(canConfirm ? "Yes" : "No")} | Can cancel: {(canCancel ? "Yes" : "No")}");
+        sb.AppendLine();
+    }
+
+    private static void FormatTreasureMarkdown(StringBuilder sb, Dictionary<string, object?> treasure)
+    {
+        if (treasure.TryGetValue("player", out var playerObj) && playerObj is Dictionary<string, object?> player)
+        {
+            sb.AppendLine("## Player");
+            sb.AppendLine($"**{player["character"]}** — HP: {player["hp"]}/{player["max_hp"]} | Gold: {player["gold"]}");
+            sb.AppendLine();
+        }
+
+        if (treasure.TryGetValue("relics", out var relicsObj) && relicsObj is List<Dictionary<string, object?>> relics && relics.Count > 0)
+        {
+            sb.AppendLine("## Treasure Relics");
+            foreach (var relic in relics)
+            {
+                string rarity = relic.TryGetValue("rarity", out var r) && r != null ? $" ({r})" : "";
+                sb.AppendLine($"- [{relic["index"]}] **{relic["name"]}**{rarity} — {relic["description"]}");
+            }
+            sb.AppendLine();
+            sb.AppendLine("Use `treasure_claim_relic(relic_index)` to claim a relic.");
+        }
+        else
+        {
+            sb.AppendLine("Chest is opening...");
+        }
+        sb.AppendLine();
+
+        bool canProceed = treasure.TryGetValue("can_proceed", out var cp) && cp is true;
+        if (canProceed)
+            sb.AppendLine("**Can proceed:** Yes");
         sb.AppendLine();
     }
 

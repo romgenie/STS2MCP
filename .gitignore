@@ -9,5 +9,6 @@ __pycache__/
 mcp/.venv/
 
 # Claude Code
-.claude/
-.mcp.json
+# .claude/
+# .mcp.json
+CLAUDE.md

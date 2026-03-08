@@ -111,6 +111,9 @@ async def combat_play_card(card_index: int, target: str | None = None) -> str:
     Args:
         card_index: Index of the card in hand (0-based, as shown in game state).
         target: Entity ID of the target enemy (e.g. "jaw_worm_0"). Required for single-target cards.
+
+    Note that the index can change as cards are played - playing a card will shift the indices of remaining cards in hand.
+    Refer to the latest game state for accurate indices. New cards are drawn to the right, so playing cards from right to left can help maintain more stable indices for remaining cards.
     """
     body: dict = {"action": "play_card", "card_index": card_index}
     if target is not None:
@@ -139,21 +142,67 @@ async def combat_end_turn() -> str:
 
 
 # ---------------------------------------------------------------------------
+# In-Combat Card Selection (state_type: hand_select)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def combat_select_card(card_index: int) -> str:
+    """[Combat Selection] Select a card from hand during an in-combat card selection prompt.
+
+    Used when a card effect asks you to select a card to exhaust, discard, etc.
+    This is different from deck_select_card which handles out-of-combat card selection overlays.
+
+    Args:
+        card_index: 0-based index of the card in the selectable hand cards (as shown in game state).
+    """
+    body: dict = {"action": "combat_select_card", "card_index": card_index}
+    try:
+        return await _post(body)
+    except httpx.ConnectError:
+        return "Error: Cannot connect to STS2_MCP mod. Is the game running with the mod enabled?"
+    except httpx.HTTPStatusError as e:
+        return f"Error: HTTP {e.response.status_code} — {e.response.text}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+async def combat_confirm_selection() -> str:
+    """[Combat Selection] Confirm the in-combat card selection.
+
+    After selecting the required number of cards from hand (exhaust, discard, etc.),
+    use this to confirm the selection. Only works when the confirm button is enabled.
+    """
+    try:
+        return await _post({"action": "combat_confirm_selection"})
+    except httpx.ConnectError:
+        return "Error: Cannot connect to STS2_MCP mod. Is the game running with the mod enabled?"
+    except httpx.HTTPStatusError as e:
+        return f"Error: HTTP {e.response.status_code} — {e.response.text}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ---------------------------------------------------------------------------
 # Rewards (state_type: combat_rewards / card_reward)
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
-async def rewards_claim(index: int) -> str:
+async def rewards_claim(reward_index: int) -> str:
     """[Rewards] Claim a reward from the post-combat rewards screen.
 
     Gold, potion, and relic rewards are claimed immediately.
     Card rewards open the card selection screen (state changes to card_reward).
 
     Args:
-        index: 0-based index of the reward on the rewards screen.
+        reward_index: 0-based index of the reward on the rewards screen.
+
+    Note that claiming a reward may change the indices of remaining rewards, so refer to the latest game state for accurate indices.
+    Claiming from right to left can help maintain more stable indices for remaining rewards, as rewards will always shift left to fill in gaps.
     """
-    body: dict = {"action": "claim_reward", "index": index}
+    body: dict = {"action": "claim_reward", "index": reward_index}
     try:
         return await _post(body)
     except httpx.ConnectError:
@@ -201,13 +250,13 @@ async def rewards_skip_card() -> str:
 
 
 @mcp.tool()
-async def map_choose_node(index: int) -> str:
+async def map_choose_node(node_index: int) -> str:
     """[Map] Choose a map node to travel to.
 
     Args:
-        index: 0-based index of the node from the next_options list.
+        node_index: 0-based index of the node from the next_options list.
     """
-    body: dict = {"action": "choose_map_node", "index": index}
+    body: dict = {"action": "choose_map_node", "index": node_index}
     try:
         return await _post(body)
     except httpx.ConnectError:
@@ -224,13 +273,13 @@ async def map_choose_node(index: int) -> str:
 
 
 @mcp.tool()
-async def rest_choose_option(index: int) -> str:
+async def rest_choose_option(option_index: int) -> str:
     """[Rest Site] Choose a rest site option (rest, smith, etc.).
 
     Args:
-        index: 0-based index of the option from the rest site state.
+        option_index: 0-based index of the option from the rest site state.
     """
-    body: dict = {"action": "choose_rest_option", "index": index}
+    body: dict = {"action": "choose_rest_option", "index": option_index}
     try:
         return await _post(body)
     except httpx.ConnectError:
@@ -247,13 +296,13 @@ async def rest_choose_option(index: int) -> str:
 
 
 @mcp.tool()
-async def shop_purchase(index: int) -> str:
+async def shop_purchase(item_index: int) -> str:
     """[Shop] Purchase an item from the shop.
 
     Args:
-        index: 0-based index of the item from the shop state.
+        item_index: 0-based index of the item from the shop state.
     """
-    body: dict = {"action": "shop_purchase", "index": index}
+    body: dict = {"action": "shop_purchase", "index": item_index}
     try:
         return await _post(body)
     except httpx.ConnectError:
@@ -270,16 +319,16 @@ async def shop_purchase(index: int) -> str:
 
 
 @mcp.tool()
-async def event_choose_option(index: int) -> str:
+async def event_choose_option(option_index: int) -> str:
     """[Event] Choose an event option.
 
     Works for both regular events and ancients (after dialogue ends).
     Also used to click the Proceed option after an event resolves.
 
     Args:
-        index: 0-based index of the unlocked option.
+        option_index: 0-based index of the unlocked option.
     """
-    body: dict = {"action": "choose_event_option", "index": index}
+    body: dict = {"action": "choose_event_option", "index": option_index}
     try:
         return await _post(body)
     except httpx.ConnectError:
@@ -312,7 +361,7 @@ async def event_advance_dialogue() -> str:
 
 
 @mcp.tool()
-async def deck_select_card(index: int) -> str:
+async def deck_select_card(card_index: int) -> str:
     """[Card Selection] Select or deselect a card in the card selection screen.
 
     Used when the game asks you to choose cards from your deck (transform, upgrade,
@@ -321,9 +370,9 @@ async def deck_select_card(index: int) -> str:
     For deck selections: toggles card selection. For choose-a-card: picks immediately.
 
     Args:
-        index: 0-based index of the card (as shown in game state).
+        card_index: 0-based index of the card (as shown in game state).
     """
-    body: dict = {"action": "select_card", "index": index}
+    body: dict = {"action": "select_card", "index": card_index}
     try:
         return await _post(body)
     except httpx.ConnectError:
@@ -376,15 +425,15 @@ async def deck_cancel_selection() -> str:
 
 
 @mcp.tool()
-async def relic_select(index: int) -> str:
+async def relic_select(relic_index: int) -> str:
     """[Relic Selection] Select a relic from the relic selection screen.
 
     Used when the game offers a choice of relics (e.g., boss relic rewards).
 
     Args:
-        index: 0-based index of the relic (as shown in game state).
+        relic_index: 0-based index of the relic (as shown in game state).
     """
-    body: dict = {"action": "select_relic", "index": index}
+    body: dict = {"action": "select_relic", "index": relic_index}
     try:
         return await _post(body)
     except httpx.ConnectError:
@@ -400,6 +449,32 @@ async def relic_skip() -> str:
     """[Relic Selection] Skip the relic selection without choosing a relic."""
     try:
         return await _post({"action": "skip_relic_selection"})
+    except httpx.ConnectError:
+        return "Error: Cannot connect to STS2_MCP mod. Is the game running with the mod enabled?"
+    except httpx.HTTPStatusError as e:
+        return f"Error: HTTP {e.response.status_code} — {e.response.text}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ---------------------------------------------------------------------------
+# Treasure (state_type: treasure)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def treasure_claim_relic(relic_index: int) -> str:
+    """[Treasure] Claim a relic from the treasure chest.
+
+    The chest is auto-opened when entering the treasure room.
+    After claiming, use proceed_to_map() to continue.
+
+    Args:
+        relic_index: 0-based index of the relic (as shown in game state).
+    """
+    body: dict = {"action": "claim_treasure_relic", "index": relic_index}
+    try:
+        return await _post(body)
     except httpx.ConnectError:
         return "Error: Cannot connect to STS2_MCP mod. Is the game running with the mod enabled?"
     except httpx.HTTPStatusError as e:

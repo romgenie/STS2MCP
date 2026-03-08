@@ -1,14 +1,13 @@
 # Slay The Spire 2 - MCP Server
 
-:::caution
-This mod allows external programs to read the game's state and control the gameplay via a localhost API.
-
-Ill-intentioned software can abuse the API to ruin your runs, and those software likely require no special permissions to run.
-
-Additionally, even the best AI agents make the gravest mistakes sometimes.
-
-Use the mod at your own risk, and only with runs you care less about.
-:::
+> [!warning]
+> This mod allows external programs to read the game's state and control the gameplay via a localhost API.
+>
+> Ill-intentioned software can abuse the API to ruin your runs, and those software likely require no special permissions to run.
+>
+> Additionally, even the best AI agents make the gravest mistakes sometimes.
+>
+> Use the mod at your own risk, and only with runs you care less about.
 
 A mod for [**Slay the Spire 2**](https://store.steampowered.com/app/2868840/Slay_the_Spire_2/) that exposes the game state and allows external control via REST endpoints, plus an optional Python MCP server for native AI agent integration.
 
@@ -19,13 +18,19 @@ Tested against STS2 `v0.98.2`
 ## Roadmap
 
 - [ ] Singleplayer
-  - [x] Full battle state
+  - [x] Full battle state with keyword glossary
   - [x] Battle actions (play cards, use potions, end turn)
   - [x] Post-combat reward screen (claim rewards, card selection, skip, proceed)
   - [x] Map navigation (full DAG state, path selection)
   - [x] Rest site actions (resting, smithing, other options)
-  - [x] Shop (browse inventory, purchase cards/relics/potions, card removal)
+  - [x] Shop (browse inventory, purchase cards/relics/potions, card removal, auto-open)
   - [x] Events (choices, dialogue) and Ancients (dialogue advancement, relic options)
+  - [x] Card selection overlays (transform, upgrade, remove, choose-a-card from potions/effects)
+  - [x] In-combat card selection (exhaust, discard, upgrade prompts from card effects)
+  - [x] Relic selection (boss relics, skip)
+  - [x] Treasure rooms (auto-open chest, claim relics)
+  - [x] Keyword system across all entities (cards, relics, potions, powers, events, shop)
+  - [x] Catch-all overlay detection (prevents soft-locks on unhandled screens)
   - [ ] Quality assurance and edge case handling
 - [ ] Multiplayer
   - [ ] Authentication for multiplayer sessions
