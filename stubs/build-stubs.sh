@@ -13,9 +13,9 @@ mkdir -p "$OUT_DIR"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
-dotnet build "$SCRIPT_DIR/GodotSharp/GodotSharp.csproj" -c Release -o "$TMPDIR/godot" --nologo -q
-dotnet build "$SCRIPT_DIR/Harmony/Harmony.csproj"       -c Release -o "$TMPDIR/harmony" --nologo -q
-dotnet build "$SCRIPT_DIR/sts2/sts2.csproj"             -c Release -o "$TMPDIR/sts2" --nologo -q
+dotnet build "$SCRIPT_DIR/GodotSharp/GodotSharp.csproj" -c Release -o "$TMPDIR/godot" --nologo --verbosity minimal
+dotnet build "$SCRIPT_DIR/Harmony/Harmony.csproj"       -c Release -o "$TMPDIR/harmony" --nologo --verbosity minimal
+dotnet build "$SCRIPT_DIR/sts2/sts2.csproj"             -c Release -o "$TMPDIR/sts2" --nologo --verbosity minimal
 
 cp "$TMPDIR/godot/GodotSharp.dll"   "$OUT_DIR/GodotSharp.dll"
 cp "$TMPDIR/harmony/0Harmony.dll"   "$OUT_DIR/0Harmony.dll"
