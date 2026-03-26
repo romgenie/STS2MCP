@@ -233,13 +233,6 @@ public static partial class McpMod
         battle["turn"] = combatState.CurrentSide.ToString().ToLower();
         battle["is_play_phase"] = CombatManager.Instance.IsPlayPhase;
 
-        // Player state
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            battle["player"] = BuildPlayerState(player);
-        }
-
         // Enemies
         var enemies = new List<Dictionary<string, object?>>();
         var entityCounts = new Dictionary<string, int>();
@@ -485,18 +478,6 @@ public static partial class McpMod
     {
         var state = new Dictionary<string, object?>();
 
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold
-            };
-        }
-
         var eventModel = eventRoom.CanonicalEvent;
         bool isAncient = eventModel is AncientEventModel;
         state["event_id"] = eventModel.Id.Entry;
@@ -557,18 +538,6 @@ public static partial class McpMod
     {
         var state = new Dictionary<string, object?>();
 
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold
-            };
-        }
-
         var options = new List<Dictionary<string, object?>>();
         int index = 0;
         foreach (var opt in restSiteRoom.Options)
@@ -594,20 +563,6 @@ public static partial class McpMod
     private static Dictionary<string, object?> BuildShopState(MerchantRoom merchantRoom, RunState runState)
     {
         var state = new Dictionary<string, object?>();
-
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold,
-                ["potion_slots"] = player.PotionSlots.Count,
-                ["open_potion_slots"] = player.PotionSlots.Count(s => s == null)
-            };
-        }
 
         var inventory = merchantRoom.Inventory;
         var items = new List<Dictionary<string, object?>>();
@@ -706,23 +661,6 @@ public static partial class McpMod
     private static Dictionary<string, object?> BuildMapState(RunState runState)
     {
         var state = new Dictionary<string, object?>();
-
-        // Player summary
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            int totalSlots = player.PotionSlots.Count;
-            int openSlots = player.PotionSlots.Count(s => s == null);
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold,
-                ["potion_slots"] = totalSlots,
-                ["open_potion_slots"] = openSlots
-            };
-        }
 
         var map = runState.Map;
         var visitedCoords = runState.VisitedMapCoords;
@@ -833,23 +771,6 @@ public static partial class McpMod
     {
         var state = new Dictionary<string, object?>();
 
-        // Player summary for decision-making context
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            int totalSlots = player.PotionSlots.Count;
-            int openSlots = player.PotionSlots.Count(s => s == null);
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold,
-                ["potion_slots"] = totalSlots,
-                ["open_potion_slots"] = openSlots
-            };
-        }
-
         // Reward items
         var rewardButtons = FindAll<NRewardButton>(rewardsScreen);
         var items = new List<Dictionary<string, object?>>();
@@ -947,18 +868,6 @@ public static partial class McpMod
         };
 
         // Player summary
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold
-            };
-        }
-
         // Prompt text from UI label
         var bottomLabel = screen.GetNodeOrNull("%BottomLabel");
         if (bottomLabel != null)
@@ -1039,18 +948,6 @@ public static partial class McpMod
     {
         var state = new Dictionary<string, object?>();
         state["screen_type"] = "choose";
-
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold
-            };
-        }
 
         state["prompt"] = "Choose a card.";
 
@@ -1166,18 +1063,6 @@ public static partial class McpMod
     {
         var state = new Dictionary<string, object?>();
 
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold
-            };
-        }
-
         state["prompt"] = "Choose a relic.";
 
         var relicHolders = FindAll<NRelicBasicHolder>(screen);
@@ -1209,18 +1094,6 @@ public static partial class McpMod
     private static Dictionary<string, object?> BuildTreasureState(TreasureRoom treasureRoom, RunState runState)
     {
         var state = new Dictionary<string, object?>();
-
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold
-            };
-        }
 
         var treasureUI = FindFirst<NTreasureRoom>(
             ((Godot.SceneTree)Godot.Engine.GetMainLoop()).Root);
