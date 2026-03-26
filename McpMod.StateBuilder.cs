@@ -706,6 +706,40 @@ public static partial class McpMod
         {
             int totalSlots = player.PotionSlots.Count;
             int openSlots = player.PotionSlots.Count(s => s == null);
+
+            var relics = new List<Dictionary<string, object?>>();
+            foreach (var relic in player.Relics)
+            {
+                relics.Add(new Dictionary<string, object?>
+                {
+                    ["id"] = relic.Id.Entry,
+                    ["name"] = SafeGetText(() => relic.Title),
+                    ["description"] = SafeGetText(() => relic.DynamicDescription),
+                    ["counter"] = relic.ShowCounter ? relic.DisplayAmount : null,
+                    ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
+                });
+            }
+
+            var potions = new List<Dictionary<string, object?>>();
+            int slotIndex = 0;
+            foreach (var potion in player.PotionSlots)
+            {
+                if (potion != null)
+                {
+                    potions.Add(new Dictionary<string, object?>
+                    {
+                        ["id"] = potion.Id.Entry,
+                        ["name"] = SafeGetText(() => potion.Title),
+                        ["description"] = SafeGetText(() => potion.DynamicDescription),
+                        ["slot"] = slotIndex,
+                        ["can_use_in_combat"] = potion.Usage == PotionUsage.CombatOnly || potion.Usage == PotionUsage.AnyTime,
+                        ["target_type"] = potion.TargetType.ToString(),
+                        ["keywords"] = BuildHoverTips(potion.HoverTips)
+                    });
+                }
+                slotIndex++;
+            }
+
             state["player"] = new Dictionary<string, object?>
             {
                 ["character"] = SafeGetText(() => player.Character.Title),
@@ -713,7 +747,9 @@ public static partial class McpMod
                 ["max_hp"] = player.Creature.MaxHp,
                 ["gold"] = player.Gold,
                 ["potion_slots"] = totalSlots,
-                ["open_potion_slots"] = openSlots
+                ["open_potion_slots"] = openSlots,
+                ["relics"] = relics,
+                ["potions"] = potions
             };
         }
 
