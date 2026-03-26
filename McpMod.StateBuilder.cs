@@ -212,7 +212,14 @@ public static partial class McpMod
         var _player = LocalContext.GetMe(runState);
         if (_player != null)
         {
-            result["player"] = BuildPlayerState(_player);
+            try
+            {
+                result["player"] = BuildPlayerState(_player);
+            }
+            catch (System.Exception e)
+            {
+                result["player_error"] = e.Message;
+            }
         }
 
         // Always include map data so external tools can display it regardless of current screen
