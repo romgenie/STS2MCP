@@ -1840,29 +1840,55 @@ public static partial class McpMod
         }
         result["card_stats"] = cards;
 
-        // Encounter stats
+        // Encounter stats (with per-character breakdown)
         var encounters = new List<Dictionary<string, object?>>();
         foreach (var kv in progress.EncounterStats)
         {
-            encounters.Add(new Dictionary<string, object?>
+            var enc = new Dictionary<string, object?>
             {
                 ["id"] = kv.Key.Entry,
                 ["total_wins"] = kv.Value.TotalWins,
                 ["total_losses"] = kv.Value.TotalLosses
-            });
+            };
+            var fightStats = new List<Dictionary<string, object?>>();
+            foreach (var fs in kv.Value.FightStats)
+            {
+                fightStats.Add(new Dictionary<string, object?>
+                {
+                    ["character"] = fs.Character.Entry,
+                    ["wins"] = fs.Wins,
+                    ["losses"] = fs.Losses
+                });
+            }
+            if (fightStats.Count > 0)
+                enc["by_character"] = fightStats;
+            encounters.Add(enc);
         }
         result["encounter_stats"] = encounters;
 
-        // Enemy stats
+        // Enemy stats (with per-character breakdown)
         var enemies = new List<Dictionary<string, object?>>();
         foreach (var kv in progress.EnemyStats)
         {
-            enemies.Add(new Dictionary<string, object?>
+            var enemy = new Dictionary<string, object?>
             {
                 ["id"] = kv.Key.Entry,
                 ["total_wins"] = kv.Value.TotalWins,
                 ["total_losses"] = kv.Value.TotalLosses
-            });
+            };
+            var fightStats = new List<Dictionary<string, object?>>();
+            foreach (var fs in kv.Value.FightStats)
+            {
+                fightStats.Add(new Dictionary<string, object?>
+                {
+                    ["character"] = fs.Character.Entry,
+                    ["wins"] = fs.Wins,
+                    ["losses"] = fs.Losses
+                });
+            }
+            if (fightStats.Count > 0)
+                enemy["by_character"] = fightStats;
+            enemies.Add(enemy);
         }
         result["enemy_stats"] = enemies;
 
