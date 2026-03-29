@@ -1403,4 +1403,51 @@ public static partial class McpMod
         }
         return powers;
     }
+
+    internal static object BuildGlossaryCards()
+    {
+        if (!RunManager.Instance.IsInProgress)
+            return new Dictionary<string, object?> { ["error"] = "No run in progress." };
+
+        var runState = RunManager.Instance.DebugOnlyGetState();
+        if (runState == null)
+            return new Dictionary<string, object?> { ["error"] = "Could not read run state." };
+
+        var result = new List<Dictionary<string, object?>>();
+        var seen = new HashSet<string>();
+
+        foreach (var player in runState.Players)
+        {
+            var pool = player.Character?.CardPool;
+            if (pool == null) continue;
+            var poolName = SafeGetText(() => pool.Title) ?? "Unknown";
+
+            foreach (var card in pool.AllCards)
+            {
+                var id = card.Id.Entry;
+                if (seen.Contains(id)) continue;
+                seen.Add(id);
+
+                string costDisplay;
+                if (card.EnergyCost.CostsX)
+                    costDisplay = "X";
+                else
+                    costDisplay = card.EnergyCost.GetAmountToSpend().ToString();
+
+                result.Add(new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["name"] = SafeGetText(() => card.Title),
+                    ["type"] = card.Type.ToString(),
+                    ["cost"] = costDisplay,
+                    ["description"] = SafeGetCardDescription(card),
+                    ["rarity"] = card.Rarity.ToString(),
+                    ["pool"] = poolName,
+                    ["keywords"] = BuildHoverTips(card.HoverTips)
+                });
+            }
+        }
+
+        return result;
+    }
 }
