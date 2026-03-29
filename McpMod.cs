@@ -183,6 +183,24 @@ public static partial class McpMod
                 else
                     SendError(response, 405, "Method not allowed");
             }
+            else if (path == "/api/v1/bestiary")
+            {
+                if (request.HttpMethod == "GET")
+                {
+                    try
+                    {
+                        var dataTask = RunOnMainThread(() => BuildBestiary());
+                        var data = dataTask.GetAwaiter().GetResult();
+                        SendJson(response, data);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        SendError(response, 500, $"Failed to build bestiary: {ex.Message}");
+                    }
+                }
+                else
+                    SendError(response, 405, "Method not allowed");
+            }
             else if (path == "/api/v1/glossary/cards")
             {
                 if (request.HttpMethod == "GET")

@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
 using MegaCrit.Sts2.Core.Entities.Merchant;
@@ -1957,6 +1958,79 @@ public static partial class McpMod
         result["fastest_victory"] = progress.FastestVictory;
         result["best_win_streak"] = progress.BestWinStreak;
         result["number_of_runs"] = progress.NumberOfRuns;
+
+        return result;
+    }
+
+    internal static object BuildBestiary()
+    {
+        var result = new Dictionary<string, object?>();
+        var bindFlags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+
+        // All monsters — use reflection to read properties without full instantiation
+        var monsters = new List<Dictionary<string, object?>>();
+        foreach (var type in typeof(MonsterModel).Assembly.GetTypes())
+        {
+            if (type.IsAbstract || !type.IsSubclassOf(typeof(MonsterModel)) || type.FullName!.Contains("+")) continue;
+
+            var entry = new Dictionary<string, object?>
+            {
+                ["id"] = ModelId.SlugifyCategory(type.Name),
+                ["class"] = type.Name,
+            };
+
+            // Try to get HP from overridden properties
+            try
+            {
+                var instance = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);
+                var minHp = type.GetProperty("MinInitialHp")?.GetValue(instance);
+                var maxHp = type.GetProperty("MaxInitialHp")?.GetValue(instance);
+                if (minHp != null) entry["min_hp"] = minHp;
+                if (maxHp != null) entry["max_hp"] = maxHp;
+            }
+            catch { }
+
+            // Get move names from method signatures
+            var moves = new List<string>();
+            foreach (var m in type.GetMethods(bindFlags))
+            {
+                if (m.Name.EndsWith("Move") && m.DeclaringType == type
+                    && m.Name != "PerformMove" && m.Name != "RollMove"
+                    && m.Name != "SetMoveImmediate")
+                    moves.Add(m.Name.Replace("Move", ""));
+            }
+            if (moves.Count > 0)
+                entry["moves"] = moves;
+
+            monsters.Add(entry);
+        }
+        result["monsters"] = monsters;
+
+        // All encounters — use reflection
+        var encounters = new List<Dictionary<string, object?>>();
+        foreach (var type in typeof(EncounterModel).Assembly.GetTypes())
+        {
+            if (type.IsAbstract || !type.IsSubclassOf(typeof(EncounterModel)) || type.FullName!.Contains("+")) continue;
+
+            var entry = new Dictionary<string, object?>
+            {
+                ["id"] = ModelId.SlugifyCategory(type.Name),
+                ["class"] = type.Name,
+            };
+
+            try
+            {
+                var instance = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);
+                var roomType = type.GetProperty("RoomType")?.GetValue(instance);
+                var isWeak = type.GetProperty("IsWeak")?.GetValue(instance);
+                if (roomType != null) entry["room_type"] = roomType.ToString();
+                if (isWeak != null) entry["is_weak"] = isWeak;
+            }
+            catch { }
+
+            encounters.Add(entry);
+        }
+        result["encounters"] = encounters;
 
         return result;
     }
