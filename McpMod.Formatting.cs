@@ -667,7 +667,7 @@ public static partial class McpMod
                     foreach (var card in cards)
                     {
                         string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                        sb.AppendLine($"  {card["name"]} ({card["cost"]}{starCost}) [{card["type"]}] {card["rarity"]}");
+                        sb.AppendLine($"  **{card["name"]}** ({card["cost"]} energy{starCost}) [{card["type"]}] {card["rarity"]} - {card["description"]}");
                     }
                 }
             }
