@@ -854,7 +854,7 @@ Choose an event option.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `index` | int | Yes | 0-based index among unlocked options |
+| `index` | int | Yes | 0-based index matching the option's `index` from state (locked options return an error) |
 
 Works for both regular events and Ancients (after dialogue ends).
 
@@ -878,7 +878,7 @@ Choose a rest site option (rest, smith, etc.).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `index` | int | Yes | 0-based index among enabled options |
+| `index` | int | Yes | 0-based index matching the option's `index` from state (disabled options return an error) |
 
 ### `shop_purchase`
 

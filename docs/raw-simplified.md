@@ -88,7 +88,7 @@ All POST requests use JSON body with `"action"` field. All responses include `{ 
 
 | Action | Parameters | When to Use |
 |---|---|---|
-| `choose_event_option` | `index`: int | Choose an unlocked event option. Also used for "Proceed" options. |
+| `choose_event_option` | `index`: int | Choose an event option by index from state. Locked options return an error. Also used for "Proceed" options. |
 | `advance_dialogue` | _(none)_ | Click through Ancient dialogue until `in_dialogue` is false. |
 
 ### Rest Site (`rest_site`)
