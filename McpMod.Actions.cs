@@ -1259,6 +1259,20 @@ public static partial class McpMod
             return Error($"Unknown timeline option: {option}. Use: advance, back");
         }
 
+        // Multiplayer Join Friend screen — friend list, refresh, back, or join_<index>/<player_id>.
+        var joinScreen = FindFirst<NJoinFriendScreen>(tree.Root);
+        if (joinScreen != null && IsNodeVisible(joinScreen))
+        {
+            return ExecuteJoinScreenMenuOption(joinScreen, option);
+        }
+
+        // Multiplayer Load Game lobby — confirm/embark/unready/back to resume saved MP run.
+        var loadLobby = FindFirst<NMultiplayerLoadGameScreen>(tree.Root);
+        if (loadLobby != null && IsNodeVisible(loadLobby))
+        {
+            return ExecuteLoadLobbyMenuOption(loadLobby, option);
+        }
+
         // Character select can outlive or be mounted separately from NMainMenu,
         // so handle it before main-menu-specific routing.
         var charSelect = FindFirst<NCharacterSelectScreen>(tree.Root);
@@ -1361,6 +1375,7 @@ public static partial class McpMod
                 "timeline" => "_timelineButton",
                 "settings" => "_settingsButton",
                 "continue" => "_continueButton",
+                "abandon_run" => "_abandonRunButton",
                 "quit" => "_quitButton",
                 _ => null
             };
@@ -1437,6 +1452,120 @@ public static partial class McpMod
         return Error($"Unknown profile select option: {option}. Use: profile_1, profile_2, profile_3, back");
     }
 
+    private static Dictionary<string, object?> ExecuteJoinScreenMenuOption(
+        NJoinFriendScreen joinScreen,
+        string option)
+    {
+        var normalized = option.ToLowerInvariant();
+
+        if (normalized == "back")
+        {
+            return ClickMenuButtonField(joinScreen, "_backButton", "Going back from join screen", "Back button is not available");
+        }
+
+        if (normalized == "refresh")
+        {
+            var refreshBtn = GetInstanceFieldValue(joinScreen, "_refreshButton") as NClickableControl;
+            if (refreshBtn != null && refreshBtn.IsEnabled && IsNodeVisible(refreshBtn))
+            {
+                refreshBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Refreshing friend list" };
+            }
+            return Error("Refresh button not available");
+        }
+
+        // join_<index> or join_<player_id>
+        if (normalized.StartsWith("join_", System.StringComparison.Ordinal))
+        {
+            var key = normalized["join_".Length..];
+            var buttonContainer = GetInstanceFieldValue(joinScreen, "_buttonContainer") as Control;
+            if (buttonContainer == null)
+                return Error("Friend list container not available");
+
+            // Build the in-order friend list once
+            var friendButtons = new List<NJoinFriendButton>();
+            foreach (var child in buttonContainer.GetChildren())
+            {
+                if (child is NJoinFriendButton fbtn)
+                    friendButtons.Add(fbtn);
+            }
+
+            if (friendButtons.Count == 0)
+                return Error("No friends with open lobbies. Use 'refresh' to retry.");
+
+            // Try as index first
+            if (int.TryParse(key, out int idx))
+            {
+                if (idx < 0 || idx >= friendButtons.Count)
+                    return Error($"Friend index {idx} out of range (0..{friendButtons.Count - 1})");
+                if (!friendButtons[idx].IsEnabled)
+                    return Error($"Friend at index {idx} is not joinable right now");
+                friendButtons[idx].ForceClick();
+                return new Dictionary<string, object?>
+                {
+                    ["status"] = "ok",
+                    ["message"] = $"Joining friend at index {idx}"
+                };
+            }
+
+            // Otherwise treat as ulong player id
+            if (ulong.TryParse(key, out ulong playerId))
+            {
+                var match = friendButtons.FirstOrDefault(b => b.PlayerId == playerId);
+                if (match == null)
+                    return Error($"No friend with player_id {playerId} in current list. Available indices: 0..{friendButtons.Count - 1}");
+                if (!match.IsEnabled)
+                    return Error($"Friend {playerId} is not joinable right now");
+                match.ForceClick();
+                return new Dictionary<string, object?>
+                {
+                    ["status"] = "ok",
+                    ["message"] = $"Joining friend {playerId}"
+                };
+            }
+
+            return Error($"Unknown join target: '{key}'. Use join_<index> (e.g. join_0) or join_<player_id>.");
+        }
+
+        return Error($"Unknown join screen option: {option}. Use: refresh, back, join_<index>, join_<player_id>");
+    }
+
+    private static Dictionary<string, object?> ExecuteLoadLobbyMenuOption(
+        NMultiplayerLoadGameScreen loadLobby,
+        string option)
+    {
+        var normalized = option.ToLowerInvariant();
+
+        if (normalized == "confirm" || normalized == "embark" || normalized == "ready")
+        {
+            var confirmBtn = GetInstanceFieldValue(loadLobby, "_confirmButton") as NClickableControl;
+            if (confirmBtn != null && confirmBtn.IsEnabled && IsNodeVisible(confirmBtn))
+            {
+                confirmBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Readied up to load saved MP run" };
+            }
+            return Error("Confirm button not available — already ready, or lobby not yet initialized");
+        }
+
+        if (normalized == "unready")
+        {
+            var unreadyBtn = GetInstanceFieldValue(loadLobby, "_unreadyButton") as NClickableControl;
+            if (unreadyBtn != null && unreadyBtn.IsEnabled && IsNodeVisible(unreadyBtn))
+            {
+                unreadyBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Retracted ready vote" };
+            }
+            return Error("Unready button not available — you have not confirmed yet");
+        }
+
+        if (normalized == "back")
+        {
+            return ClickMenuButtonField(loadLobby, "_backButton", "Going back from load lobby", "Back button is not available");
+        }
+
+        return Error($"Unknown load lobby option: {option}. Use: confirm, embark, unready, back");
+    }
+
     private static Dictionary<string, object?> ExecuteCharacterSelectMenuOption(
         NCharacterSelectScreen charSelect,
         string option,
@@ -1444,14 +1573,35 @@ public static partial class McpMod
     {
         if (string.Equals(option, "back", System.StringComparison.OrdinalIgnoreCase))
         {
-            var backBtn = GetInstanceFieldValue(charSelect, "_backButton")
-                ?? GetInstanceFieldValue(charSelect, "_unreadyButton");
-            if (backBtn is NClickableControl backClickable && IsControlVisibleOrActionable(backClickable))
+            // _backButton leaves the lobby (and disconnects in MP). _unreadyButton is a
+            // separate control that only becomes enabled after the player has hit
+            // confirm/embark in MP — it retracts the ready vote without leaving. Surface
+            // them as distinct options so callers can pick deliberately. Fall back to
+            // unready when only it is actionable so older callers don't get stuck.
+            var backBtn = GetInstanceFieldValue(charSelect, "_backButton") as NClickableControl;
+            if (backBtn != null && backBtn.IsEnabled && IsControlVisibleOrActionable(backBtn))
             {
-                backClickable.ForceClick();
+                backBtn.ForceClick();
                 return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Going back" };
             }
+            var unreadyFallback = GetInstanceFieldValue(charSelect, "_unreadyButton") as NClickableControl;
+            if (unreadyFallback != null && unreadyFallback.IsEnabled && IsControlVisibleOrActionable(unreadyFallback))
+            {
+                unreadyFallback.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Retracted ready vote (back fell through to unready)" };
+            }
             return Error("Back button not available");
+        }
+
+        if (string.Equals(option, "unready", System.StringComparison.OrdinalIgnoreCase))
+        {
+            var unreadyBtn = GetInstanceFieldValue(charSelect, "_unreadyButton") as NClickableControl;
+            if (unreadyBtn != null && unreadyBtn.IsEnabled && IsControlVisibleOrActionable(unreadyBtn))
+            {
+                unreadyBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Retracted ready vote" };
+            }
+            return Error("Unready button not available — you have not confirmed yet");
         }
 
         if (string.Equals(option, "confirm", System.StringComparison.OrdinalIgnoreCase) ||

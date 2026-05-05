@@ -155,9 +155,20 @@ async def get_game_state(format: str = "markdown") -> str:
 async def menu_select(option: str, seed: str | None = None) -> str:
     """Select a visible menu option.
 
-    Use with state_type "menu" or "game_over". Supports main-menu navigation,
-    singleplayer and multiplayer submenus, character select, timeline controls,
-    tutorial prompts, and game-over main-menu return.
+    Use with state_type "menu" or "game_over". Covers main-menu navigation,
+    singleplayer / multiplayer submenus, multiplayer host & join lobbies,
+    multiplayer load lobby (resume saved co-op run), character select for SP
+    and MP (with `unready` once readied in MP), profile switching, timeline
+    controls, tutorial prompts, blocking popups, and game-over main-menu return.
+
+    Multiplayer flow tips:
+      - On menu_screen "multiplayer_join", use refresh / back / join_<index> /
+        join_<player_id> (e.g. "join_0" or "join_76561198000000000").
+      - On menu_screen "multiplayer_load_lobby", use confirm (or embark) to
+        ready up; the run resumes once everyone is connected and ready.
+      - On menu_screen "character_select" while in MP, the state includes a
+        `lobby` block with the roster, ready states, and ascension; "unready"
+        becomes available after you confirm/embark.
 
     Args:
         option: Option ID from the current menu state's options list. If an

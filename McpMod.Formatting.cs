@@ -196,6 +196,44 @@ public static partial class McpMod
             sb.AppendLine(msg.ToString());
         sb.AppendLine();
 
+        // MP lobby block — ready/ascension/roster — same shape on character_select and load_lobby
+        if (state.TryGetValue("lobby", out var lobbyObj) &&
+            lobbyObj is Dictionary<string, object?> lobby)
+        {
+            FormatLobbyMarkdown(sb, lobby);
+        }
+
+        // Multiplayer Join — friends list
+        if (state.TryGetValue("friends", out var friendsObj) &&
+            friendsObj is List<Dictionary<string, object?>> friends)
+        {
+            bool fastMp = state.TryGetValue("fast_mp", out var fastObj) && fastObj is true;
+            bool loading = state.TryGetValue("loading", out var loadingObj) && loadingObj is true;
+            bool noFriends = state.TryGetValue("no_friends", out var noObj) && noObj is true;
+
+            sb.AppendLine($"### Friends ({friends.Count})"
+                          + (fastMp ? "  _[FastMP — auto-joins localhost:33771]_" : "")
+                          + (loading ? "  _[loading...]_" : ""));
+            if (friends.Count == 0)
+            {
+                sb.AppendLine(noFriends
+                    ? "_No friends with open lobbies. Use `refresh` to retry._"
+                    : "_(empty)_");
+            }
+            else
+            {
+                foreach (var friend in friends)
+                {
+                    var idx = friend.GetValueOrDefault("index")?.ToString() ?? "?";
+                    var name = friend.GetValueOrDefault("name")?.ToString() ?? "(unknown)";
+                    var pid = friend.GetValueOrDefault("player_id")?.ToString() ?? "?";
+                    var enabled = !friend.TryGetValue("enabled", out var en) || en is not false;
+                    sb.AppendLine($"- `join_{idx}` **{name}** ({pid}){(enabled ? "" : " (disabled)")}");
+                }
+            }
+            sb.AppendLine();
+        }
+
         if (state.TryGetValue("options", out var optionsObj) && optionsObj != null)
             FormatMenuOptionsMarkdown(sb, optionsObj);
 
@@ -218,6 +256,56 @@ public static partial class McpMod
             sb.AppendLine("Use `menu_select` with an unlocked character ID or name, then `confirm`/`embark`.");
             sb.AppendLine();
         }
+    }
+
+    private static void FormatLobbyMarkdown(StringBuilder sb, Dictionary<string, object?> lobby)
+    {
+        var type = lobby.GetValueOrDefault("type")?.ToString() ?? "?";
+        var mode = lobby.GetValueOrDefault("game_mode")?.ToString() ?? "standard";
+        var asc = lobby.GetValueOrDefault("ascension")?.ToString() ?? "0";
+        var maxAsc = lobby.GetValueOrDefault("max_ascension")?.ToString();
+        var allReady = lobby.TryGetValue("all_ready", out var ar) && ar is true;
+        var aboutToBegin = lobby.TryGetValue("is_about_to_begin", out var ab) && ab is true;
+
+        sb.Append($"### Lobby ({type}, {mode}) — Ascension: {asc}");
+        if (!string.IsNullOrEmpty(maxAsc) && maxAsc != "0")
+            sb.Append($" / max {maxAsc}");
+        sb.AppendLine();
+        sb.AppendLine($"- All ready: **{allReady}**" + (aboutToBegin ? "  — about to begin" : ""));
+
+        // MP load lobby uses act/floor/connected_player_count/expected_player_count
+        if (lobby.TryGetValue("act", out var actObj))
+        {
+            var act = actObj?.ToString();
+            var floor = lobby.GetValueOrDefault("floor")?.ToString();
+            sb.AppendLine($"- Saved progress: act {act}, floor {floor}");
+        }
+        if (lobby.TryGetValue("connected_player_count", out var connObj))
+        {
+            var conn = connObj?.ToString();
+            var expected = lobby.GetValueOrDefault("expected_player_count")?.ToString();
+            sb.AppendLine($"- Connected: {conn}/{expected}");
+        }
+
+        if (lobby.TryGetValue("players", out var pObj) &&
+            pObj is List<Dictionary<string, object?>> pl &&
+            pl.Count > 0)
+        {
+            sb.AppendLine("- Players:");
+            foreach (var p in pl)
+            {
+                var local = p.TryGetValue("is_local", out var l) && l is true ? " (you)" : "";
+                var host = p.TryGetValue("is_host", out var h) && h is true ? " [host]" : "";
+                var ready = p.TryGetValue("is_ready", out var r) && r is true ? " ✓" : "";
+                var connected = p.TryGetValue("is_connected", out var c) ? (c is true ? "" : " (disconnected)") : "";
+                var name = p.GetValueOrDefault("platform_name")?.ToString();
+                var charName = p.GetValueOrDefault("character")?.ToString()
+                               ?? p.GetValueOrDefault("character_id")?.ToString() ?? "?";
+                var label = string.IsNullOrEmpty(name) ? p.GetValueOrDefault("id")?.ToString() ?? "?" : name;
+                sb.AppendLine($"  - {label}{local}{host}: {charName}{ready}{connected}");
+            }
+        }
+        sb.AppendLine();
     }
 
     private static void FormatGameOverMarkdown(StringBuilder sb, Dictionary<string, object?> state)

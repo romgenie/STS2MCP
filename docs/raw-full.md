@@ -196,11 +196,128 @@ Menu sub-screens expose their own options:
 - `singleplayer`: `standard`, `daily`, `custom`, `back`
 - `multiplayer`: `host`, `join`, `load`, `abandon`, `back`
 - `multiplayer_host`: `standard`, `daily`, `custom`, `back`
+- `multiplayer_join`: `refresh`, `back`, `join_<index>`, `join_<player_id>`
+- `multiplayer_load_lobby`: `confirm` / `embark`, `unready`, `back`
 - `profile_select`: `profile_1`, `profile_2`, `profile_3`, `back`
-- `character_select`: character IDs/names, `back`, `confirm`, `embark`
+- `character_select`: character IDs/names, `back`, `confirm` / `embark`, `unready` (MP, after readying)
 - `tutorial_prompt`: `no`, `yes`
 - `popup`: advertised popup button labels, normalized to lowercase words such as `ignore` or `back`
 - `timeline`: `advance`, `back`
+
+The `multiplayer` submenu is gated on whether a multiplayer save exists: with no save, `host` is shown and `load` / `abandon` are hidden; with a save, those are shown and `host` is hidden. `abandon` opens a vertical popup — the next state turn surfaces the popup's `confirm` / `cancel` options, not a transition.
+
+#### `multiplayer_join` — Friend list / FastMP
+
+```jsonc
+{
+  "state_type": "menu",
+  "menu_screen": "multiplayer_join",
+  "message": "Pick a friend to join, or 'refresh' to update the list.",
+  "fast_mp": false,             // true when --fastmp / Steam not initialized; auto-joins 127.0.0.1:33771
+  "loading": false,             // true while refreshing or while a join handshake is in flight
+  "no_friends": false,          // true when refresh returned an empty list
+  "friends": [
+    { "index": 0, "name": "Bob", "player_id": "76561198000000000", "enabled": true }
+  ],
+  "options": [
+    { "name": "join_0",  "enabled": true },
+    { "name": "refresh", "enabled": true },
+    { "name": "back",    "enabled": true }
+  ]
+}
+```
+
+`menu_select` accepts either `join_<index>` (e.g. `join_0`) or `join_<player_id>` (e.g. `join_76561198000000000`) — both click the same button. With `fast_mp: true`, the screen auto-joins localhost on open; you typically won't need to issue a join action in that mode.
+
+#### `multiplayer_load_lobby` — Resume saved MP run
+
+Reached via the `multiplayer` submenu's `load` option (host) or by joining a host that already loaded a save (client). Mirrors the standard MP character-select ready/unready flow but on a fixed (saved) party.
+
+```jsonc
+{
+  "state_type": "menu",
+  "menu_screen": "multiplayer_load_lobby",
+  "message": "Multiplayer load lobby. Confirm to ready up; ...",
+  "lobby": {
+    "type": "host",                // or "client"
+    "game_mode": "standard",       // or "daily" / "custom"
+    "ascension": 0,
+    "act": 2,
+    "floor": 13,
+    "character_id": "REGENT",      // local player's saved character
+    "current_hp": 64,
+    "max_hp": 80,
+    "gold": 240,
+    "expected_player_count": 3,
+    "connected_player_count": 2,
+    "players": [
+      {
+        "id": "76561198000000000",
+        "is_local": true,
+        "character_id": "REGENT",
+        "is_connected": true,
+        "is_ready": false,
+        "platform_name": "Alice"
+      }
+    ]
+  },
+  "options": [
+    { "name": "confirm", "enabled": true },
+    { "name": "embark",  "enabled": true },   // alias of confirm
+    { "name": "back",    "enabled": true },
+    { "name": "unready", "enabled": false }   // becomes enabled after confirm/embark
+  ]
+}
+```
+
+#### `character_select` — extended for MP
+
+The same screen drives SP, MP host, and MP client. In MP, an additional `lobby` block appears, and the `unready` option becomes available after the local player has hit `confirm`/`embark`:
+
+```jsonc
+{
+  "state_type": "menu",
+  "menu_screen": "character_select",
+  "message": "Select a character.",
+  "characters": [ /* same shape as SP */ ],
+  "lobby": {                       // present only in MP
+    "type": "host",                // "host" | "client" | "singleplayer"
+    "game_mode": "standard",       // "standard" | "daily" | "custom"
+    "max_players": 4,
+    "ascension": 0,
+    "max_ascension": 5,            // min across all lobby members' MaxMultiplayerAscension
+    "all_ready": false,
+    "is_about_to_begin": false,    // mirrors StartRunLobby.IsAboutToBeginGame()
+    "is_local_ready": false,
+    "local_player_id": "76561198000000000",
+    "player_count": 2,
+    "seed": "...",                 // optional, present only for daily/custom
+    "players": [
+      {
+        "id": "76561198000000000",
+        "slot_id": 0,
+        "is_local": true,
+        "is_host": true,           // only positively true for self when hosting; otherwise false
+        "character": "The Regent",
+        "character_id": "REGENT",
+        "is_ready": false,
+        "platform_name": "Alice"
+      }
+    ]
+  },
+  "options": [
+    { "name": "REGENT",  "enabled": true },
+    { "name": "IRONCLAD","enabled": true },
+    /* ... other characters and lockable RANDOM ... */
+    { "name": "confirm", "enabled": true },
+    { "name": "embark",  "enabled": true },
+    { "name": "back",    "enabled": true },
+    { "name": "unready", "enabled": false }
+  ]
+}
+```
+
+In SP the `lobby` field is omitted, and `unready` does not appear (the unready button is only enabled after MP ready).
 
 ### `unknown`
 

@@ -27,7 +27,7 @@ Every JSON response includes:
 
 | `state_type` | Screen | Available Actions |
 |---|---|---|
-| `menu` | Main menu, menu submenu, or a blocking FTUE/tutorial/popup that can also appear mid-run | `menu_select` |
+| `menu` | Main menu, menu submenu (incl. multiplayer host/join/load lobby), character select, or a blocking FTUE/tutorial/popup that can also appear mid-run | `menu_select` |
 | `unknown` | Unrecognized room or null state | None |
 | `monster` / `elite` / `boss` | In combat | `play_card`, `use_potion`, `end_turn` |
 | `hand_select` | In-combat card selection (exhaust, discard, upgrade) | `combat_select_card`, `combat_confirm_selection` |
@@ -56,7 +56,7 @@ All POST requests use JSON body with `"action"` field. All responses include `{ 
 
 | Action | Parameters | When to Use |
 |---|---|---|
-| `menu_select` | `option`: string, `seed`?: string | Choose an advertised menu option. Options are case-insensitive. Submenus include `back` where visible, including `profile_select` options `profile_1`, `profile_2`, `profile_3`, and `back`. Blocking popups expose normalized button labels such as `ignore` or `back`. `game_over` supports `main_menu` only; `continue` returns an error. Supplying `seed` in unsupported contexts such as standard singleplayer character select returns an error and does not start a run. If Timeline has pending obtained epochs that require manual reveal, it may appear in `blocked_options`; selecting `timeline` returns `manual_action_required: true` with `pending_epoch_ids` instead of opening Timeline. |
+| `menu_select` | `option`: string, `seed`?: string | Choose an advertised menu option. Options are case-insensitive. Submenus include `back` where visible, including `profile_select` options `profile_1`, `profile_2`, `profile_3`, and `back`. Blocking popups expose normalized button labels such as `ignore` or `back`. `game_over` supports `main_menu` only; `continue` returns an error. Supplying `seed` in unsupported contexts such as standard singleplayer character select returns an error and does not start a run. If Timeline has pending obtained epochs that require manual reveal, it may appear in `blocked_options`; selecting `timeline` returns `manual_action_required: true` with `pending_epoch_ids` instead of opening Timeline. Multiplayer flow: on `multiplayer_join` use `refresh` / `back` / `join_<index>` / `join_<player_id>`. On `multiplayer_load_lobby` use `confirm` (or `embark`) to ready up, `unready` to retract, `back` to leave. On `character_select` while in MP, an additional `unready` option becomes available after readying, plus a `lobby` block in state lists ascension, all_ready, and per-player roster. |
 
 ### Profiles
 

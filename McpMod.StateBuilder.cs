@@ -41,6 +41,13 @@ using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Models.RelicPools;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Multiplayer;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Platform;
+using MegaCrit.Sts2.Core.Platform.Steam;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes.Screens.GameOverScreen;
 using MegaCrit.Sts2.Core.Nodes.Screens.Timeline;
 using MegaCrit.Sts2.Core.Nodes.Screens.Settings;
@@ -165,6 +172,28 @@ public static partial class McpMod
                         }
                     }
                 }
+                // Multiplayer Join Friend screen (lives in the same submenu stack as
+                // NMultiplayerSubmenu; pushed when the user clicks "join")
+                if (result.ContainsKey("menu_screen") == false)
+                {
+                    var joinScreen = FindFirst<NJoinFriendScreen>(tree.Root);
+                    if (joinScreen != null && IsNodeVisible(joinScreen))
+                    {
+                        AddMultiplayerJoinMenuState(result, joinScreen);
+                    }
+                }
+
+                // Multiplayer Load lobby — resume saved MP run. Pushed by NMultiplayerSubmenu
+                // when "load" is clicked (host) or by JoinFlow when joining a save in progress (client).
+                if (result.ContainsKey("menu_screen") == false)
+                {
+                    var loadLobby = FindFirst<NMultiplayerLoadGameScreen>(tree.Root);
+                    if (loadLobby != null && IsNodeVisible(loadLobby))
+                    {
+                        AddMultiplayerLoadLobbyMenuState(result, loadLobby);
+                    }
+                }
+
                 // Check for character select screen
                 if (result.ContainsKey("menu_screen") == false)
                 {
@@ -309,8 +338,8 @@ public static partial class McpMod
                         {
                             var options = new List<string>();
                             var blockedOptions = new List<Dictionary<string, object?>>();
-                            var fields = new[] { "_continueButton", "_singleplayerButton", "_multiplayerButton", "_compendiumButton", "_timelineButton", "_settingsButton", "_quitButton" };
-                            var labels = new[] { "continue", "singleplayer", "multiplayer", "compendium", "timeline", "settings", "quit" };
+                            var fields = new[] { "_continueButton", "_abandonRunButton", "_singleplayerButton", "_multiplayerButton", "_compendiumButton", "_timelineButton", "_settingsButton", "_quitButton" };
+                            var labels = new[] { "continue", "abandon_run", "singleplayer", "multiplayer", "compendium", "timeline", "settings", "quit" };
                             var unrevealedEpochs = GetProgressEpochIdsByState("Obtained", "ObtainedNoSlot");
                             for (int i = 0; i < fields.Length; i++)
                             {
@@ -683,8 +712,11 @@ public static partial class McpMod
             });
         }
 
-        var backBtn = GetInstanceFieldValue(charSelect, "_backButton")
-            ?? GetInstanceFieldValue(charSelect, "_unreadyButton");
+        // _backButton and _unreadyButton are surfaced as distinct options so MP callers
+        // can distinguish "leave the lobby" from "retract my ready vote". In SP, only
+        // _backButton ever becomes enabled. See NCharacterSelectScreen.OnEmbarkPressed /
+        // OnUnreadyPressed for the toggle logic.
+        var backBtn = GetInstanceFieldValue(charSelect, "_backButton");
         if (backBtn is NClickableControl backClickable && IsNodeVisible(backClickable))
         {
             options.Add(new Dictionary<string, object?>
@@ -694,8 +726,320 @@ public static partial class McpMod
             });
         }
 
+        // MP lobby block — surfaces roster / ready state / ascension when this character
+        // select is part of a host or client lobby. SP runs leave the field absent.
+        bool isMpCharSelect = false;
+        try
+        {
+            var lobby = charSelect.Lobby;
+            if (lobby != null && lobby.NetService != null && lobby.NetService.Type.IsMultiplayer())
+            {
+                isMpCharSelect = true;
+                result["lobby"] = BuildStartRunLobbyState(lobby);
+            }
+        }
+        catch { }
+
+        // _unreadyButton is part of the scene in SP too but never becomes enabled there.
+        // Only surface it as an option in MP, where it has a real role.
+        if (isMpCharSelect)
+        {
+            var unreadyBtn = GetInstanceFieldValue(charSelect, "_unreadyButton");
+            if (unreadyBtn is NClickableControl unreadyClickable && IsNodeVisible(unreadyClickable))
+            {
+                options.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = "unready",
+                    ["enabled"] = unreadyClickable.IsEnabled
+                });
+            }
+        }
+
         if (options.Count > 0)
             result["options"] = options;
+    }
+
+    private static Dictionary<string, object?> BuildStartRunLobbyState(StartRunLobby lobby)
+    {
+        var lobbyState = new Dictionary<string, object?>
+        {
+            ["type"] = lobby.NetService.Type switch
+            {
+                NetGameType.Host => "host",
+                NetGameType.Client => "client",
+                NetGameType.Singleplayer => "singleplayer",
+                _ => lobby.NetService.Type.ToString().ToLowerInvariant()
+            },
+            ["game_mode"] = lobby.GameMode.ToString().ToLowerInvariant(),
+            ["max_players"] = lobby.MaxPlayers,
+            ["ascension"] = lobby.Ascension,
+            ["max_ascension"] = lobby.MaxAscension,
+            ["all_ready"] = lobby.Players.Count > 0 && lobby.Players.All(p => p.isReady),
+            ["is_about_to_begin"] = SafeIsAboutToBeginGame(lobby)
+        };
+
+        // is_local_ready === local player has hit Embark in MP and is now waiting.
+        // Mirrors NCharacterSelectScreen._readyAndWaitingContainer.Visible.
+        try
+        {
+            var local = lobby.LocalPlayer;
+            lobbyState["is_local_ready"] = local.isReady;
+            lobbyState["local_player_id"] = local.id.ToString();
+        }
+        catch { }
+
+        var players = new List<Dictionary<string, object?>>();
+        ulong localId;
+        try { localId = lobby.LocalPlayer.id; } catch { localId = 0; }
+        ulong hostId = lobby.NetService.Type == NetGameType.Host ? localId : 0;
+
+        foreach (var p in lobby.Players)
+        {
+            var entry = new Dictionary<string, object?>
+            {
+                ["id"] = p.id.ToString(),
+                ["slot_id"] = p.slotId,
+                ["is_local"] = p.id == localId,
+                // We can only positively identify the host as "us" when we ARE the host;
+                // a client doesn't know which remote id is the host without inspecting
+                // the net service. Keep it simple and only flag is_host=true for self
+                // when hosting — clients can infer host-ness by player_id when needed.
+                ["is_host"] = p.id == hostId && hostId != 0,
+                ["character"] = SafeGetText(() => p.character?.Title)
+                                ?? p.character?.Id.Entry,
+                ["character_id"] = p.character?.Id.Entry,
+                ["is_ready"] = p.isReady,
+                ["platform_name"] = SafeGetPlayerName(lobby.NetService.Platform, p.id)
+            };
+            players.Add(entry);
+        }
+        lobbyState["players"] = players;
+        lobbyState["player_count"] = players.Count;
+
+        if (!string.IsNullOrEmpty(lobby.Seed))
+            lobbyState["seed"] = lobby.Seed;
+
+        return lobbyState;
+    }
+
+    private static bool SafeIsAboutToBeginGame(StartRunLobby lobby)
+    {
+        try { return lobby.IsAboutToBeginGame(); }
+        catch { return false; }
+    }
+
+    private static string? SafeGetPlayerName(PlatformType platform, ulong playerId)
+    {
+        try { return PlatformUtil.GetPlayerName(platform, playerId); }
+        catch { return null; }
+    }
+
+    private static void AddMultiplayerJoinMenuState(
+        Dictionary<string, object?> result,
+        NJoinFriendScreen joinScreen)
+    {
+        result["state_type"] = "menu";
+        result["menu_screen"] = "multiplayer_join";
+
+        // FastMP: when Steam isn't initialized OR --fastmp is set, OnSubmenuOpened auto-
+        // joins localhost:33771 instead of presenting friends. This is a debug/local-dev
+        // path. We surface it so callers don't try to hit "refresh" expecting a list.
+        bool fastMp = !SteamInitializer.Initialized || CommandLineHelper.HasArg("fastmp");
+        result["fast_mp"] = fastMp;
+
+        var loadingFriends = GetInstanceFieldValue(joinScreen, "_loadingFriendsIndicator") as Control;
+        var loadingOverlay = GetInstanceFieldValue(joinScreen, "_loadingOverlay") as Control;
+        bool loading = (loadingFriends != null && loadingFriends.Visible)
+                       || (loadingOverlay != null && loadingOverlay.Visible);
+        result["loading"] = loading;
+
+        var noFriendsLabel = GetInstanceFieldValue(joinScreen, "_noFriendsLabel") as Control;
+        bool noFriends = noFriendsLabel != null && noFriendsLabel.Visible;
+        result["no_friends"] = noFriends;
+
+        var friends = new List<Dictionary<string, object?>>();
+        var options = new List<Dictionary<string, object?>>();
+
+        var buttonContainer = GetInstanceFieldValue(joinScreen, "_buttonContainer") as Control;
+        if (buttonContainer != null)
+        {
+            int index = 0;
+            foreach (var child in buttonContainer.GetChildren())
+            {
+                if (child is NJoinFriendButton friendBtn)
+                {
+                    string? name = null;
+                    try { name = PlatformUtil.GetPlayerName(PlatformUtil.PrimaryPlatform, friendBtn.PlayerId); }
+                    catch { }
+
+                    friends.Add(new Dictionary<string, object?>
+                    {
+                        ["index"] = index,
+                        ["name"] = name,
+                        ["player_id"] = friendBtn.PlayerId.ToString(),
+                        ["enabled"] = friendBtn.IsEnabled
+                    });
+                    options.Add(new Dictionary<string, object?>
+                    {
+                        ["name"] = $"join_{index}",
+                        ["enabled"] = friendBtn.IsEnabled
+                    });
+                    index++;
+                }
+            }
+        }
+        result["friends"] = friends;
+
+        var refreshBtn = GetInstanceFieldValue(joinScreen, "_refreshButton") as NClickableControl;
+        if (refreshBtn != null && IsNodeVisible(refreshBtn))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "refresh",
+                ["enabled"] = refreshBtn.IsEnabled && !loading
+            });
+        }
+        AddMenuOptionIfVisible(options, joinScreen, "_backButton", "back");
+
+        if (fastMp)
+        {
+            result["message"] = loading
+                ? "FastMP join flow is connecting to localhost:33771..."
+                : "FastMP mode (no Steam): join screen auto-connects to localhost:33771.";
+        }
+        else if (loading)
+        {
+            result["message"] = "Refreshing friend list...";
+        }
+        else if (noFriends)
+        {
+            result["message"] = "No friends with open lobbies. Use 'refresh' to retry, or 'back' to return.";
+        }
+        else
+        {
+            result["message"] = "Pick a friend to join, or 'refresh' to update the list.";
+        }
+
+        result["options"] = options;
+    }
+
+    private static void AddMultiplayerLoadLobbyMenuState(
+        Dictionary<string, object?> result,
+        NMultiplayerLoadGameScreen loadLobby)
+    {
+        result["state_type"] = "menu";
+        result["menu_screen"] = "multiplayer_load_lobby";
+
+        var lobby = GetInstanceFieldValue(loadLobby, "_runLobby") as LoadRunLobby;
+        if (lobby != null)
+        {
+            var info = new Dictionary<string, object?>
+            {
+                ["type"] = lobby.NetService.Type switch
+                {
+                    NetGameType.Host => "host",
+                    NetGameType.Client => "client",
+                    _ => lobby.NetService.Type.ToString().ToLowerInvariant()
+                },
+                ["game_mode"] = lobby.GameMode.ToString().ToLowerInvariant(),
+                ["ascension"] = lobby.Run?.Ascension ?? 0,
+                ["act"] = (lobby.Run?.CurrentActIndex ?? 0) + 1,
+                ["floor"] = lobby.Run?.VisitedMapCoords?.Count ?? 0
+            };
+
+            try
+            {
+                var localPlayer = lobby.Run?.Players?.FirstOrDefault(p => p.NetId == lobby.NetService.NetId);
+                if (localPlayer != null)
+                {
+                    info["character_id"] = localPlayer.CharacterId?.Entry;
+                    info["current_hp"] = localPlayer.CurrentHp;
+                    info["max_hp"] = localPlayer.MaxHp;
+                    info["gold"] = localPlayer.Gold;
+                }
+            }
+            catch { }
+
+            info["expected_player_count"] = lobby.Run?.Players?.Count ?? 0;
+            info["connected_player_count"] = lobby.ConnectedPlayerIds?.Count ?? 0;
+
+            // IsAboutToBeginGame == "no players still in handshake AND every connected player is ready".
+            // It's the literal trigger for the host's TryBeginRun, so it doubles as both "all_ready" (matches
+            // the StartRunLobby semantic of 'every joined player is ready') and "is_about_to_begin".
+            // Without these fields, FormatLobbyMarkdown printed "All ready: false" unconditionally for load lobbies.
+            bool aboutToBegin = false;
+            try { aboutToBegin = lobby.IsAboutToBeginGame(); } catch { }
+            info["all_ready"] = aboutToBegin;
+            info["is_about_to_begin"] = aboutToBegin;
+
+            // Per-player ready/connected breakdown
+            var players = new List<Dictionary<string, object?>>();
+            try
+            {
+                if (lobby.Run?.Players != null)
+                {
+                    foreach (var sp in lobby.Run.Players)
+                    {
+                        bool isConnected = lobby.ConnectedPlayerIds?.Contains(sp.NetId) ?? false;
+                        bool isReady = false;
+                        try { isReady = lobby.IsPlayerReady(sp.NetId); } catch { }
+                        players.Add(new Dictionary<string, object?>
+                        {
+                            ["id"] = sp.NetId.ToString(),
+                            ["is_local"] = sp.NetId == lobby.NetService.NetId,
+                            ["character_id"] = sp.CharacterId?.Entry,
+                            ["is_connected"] = isConnected,
+                            ["is_ready"] = isReady,
+                            ["platform_name"] = SafeGetPlayerName(lobby.NetService.Platform, sp.NetId)
+                        });
+                    }
+                }
+            }
+            catch { }
+            info["players"] = players;
+
+            result["lobby"] = info;
+        }
+
+        var options = new List<Dictionary<string, object?>>();
+
+        var confirmBtn = GetInstanceFieldValue(loadLobby, "_confirmButton") as NClickableControl;
+        if (confirmBtn != null && IsNodeVisible(confirmBtn))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "confirm",
+                ["enabled"] = confirmBtn.IsEnabled
+            });
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "embark",
+                ["enabled"] = confirmBtn.IsEnabled
+            });
+        }
+
+        var backBtn2 = GetInstanceFieldValue(loadLobby, "_backButton") as NClickableControl;
+        if (backBtn2 != null && IsNodeVisible(backBtn2))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "back",
+                ["enabled"] = backBtn2.IsEnabled
+            });
+        }
+
+        var unreadyBtn2 = GetInstanceFieldValue(loadLobby, "_unreadyButton") as NClickableControl;
+        if (unreadyBtn2 != null && IsNodeVisible(unreadyBtn2))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "unready",
+                ["enabled"] = unreadyBtn2.IsEnabled
+            });
+        }
+
+        result["options"] = options;
+        result["message"] = "Multiplayer load lobby. Confirm to ready up; once everyone is connected and ready, the run resumes.";
     }
 
     private static Dictionary<string, object?> BuildBattleState(RunState runState, CombatRoom combatRoom)
