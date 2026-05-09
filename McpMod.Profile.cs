@@ -216,7 +216,7 @@ public static partial class McpMod
     {
         var progress = SaveManager.Instance?.Progress;
         if (progress == null)
-            return new Dictionary<string, object?> { ["error"] = "No profile data available." };
+            return Error("No profile data available.");
 
         var result = new Dictionary<string, object?>();
 

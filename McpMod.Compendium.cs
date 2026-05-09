@@ -105,7 +105,7 @@ public static partial class McpMod
     private static object BuildCompendiumResponse(CompendiumSnapshot snapshot)
     {
         if (snapshot.Error != null)
-            return new Dictionary<string, object?> { ["error"] = snapshot.Error };
+            return Error(snapshot.Error);
 
         var runHistory = BuildRunHistorySection(snapshot);
 
