@@ -133,6 +133,13 @@ Always present at the top level (except `menu`). Contains everything about the l
   "can_play": true,
   "unplayable_reason": null, // e.g. "NotEnoughEnergy", "Unplayable", null if playable
   "is_upgraded": false,
+  "is_upgradable": true,
+  "current_upgrade_level": 0,
+  "max_upgrade_level": 1,
+  "upgrade_preview_type": "None",
+  "upgrade_preview_cost": "1",
+  "upgrade_preview_star_cost": null,
+  "upgrade_preview_description": "Deal 9 damage.",
   "keywords": [ /* Keyword Objects */ ]
 }
 ```
@@ -150,6 +157,13 @@ Always present at the top level (except `menu`). Contains everything about the l
   "description": "Deal 6 damage.",
   "rarity": "Basic",
   "is_upgraded": false,
+  "is_upgradable": true,
+  "current_upgrade_level": 0,
+  "max_upgrade_level": 1,
+  "upgrade_preview_type": "None",
+  "upgrade_preview_cost": "1",
+  "upgrade_preview_star_cost": null,
+  "upgrade_preview_description": "Deal 9 damage.",
   "keywords": [ /* Keyword Objects */ ]
 }
 ```
@@ -991,7 +1005,7 @@ Returns reflected monster and encounter metadata. Profile-specific encounter and
 
 The glossary endpoints expose active-run pool metadata. They require a run in progress and are scoped to the current run/character context plus shared run pools such as Colorless cards, shared relics, and shared potions, not profile-wide discovered content. Successful responses are structured objects with `status`, `kind`, `scope`, `count`, `current_run`, `players`, and `items`.
 
-- `GET /api/v1/glossary/cards`: active-run card pool metadata, including upgrade availability and game-provided upgrade preview text.
+- `GET /api/v1/glossary/cards`: active-run card pool metadata, including upgrade availability plus upgraded-preview cost and description.
 - `GET /api/v1/glossary/relics`: active-run relic pool metadata.
 - `GET /api/v1/glossary/potions`: active-run potion pool metadata.
 - `GET /api/v1/glossary/keywords`: keyword metadata collected from active-run cards, relics, and potions.
@@ -1019,7 +1033,9 @@ Example success shape:
       "is_upgradable": true,
       "current_upgrade_level": 0,
       "max_upgrade_level": 1,
-      "upgrade_preview_type": "Upgrade",
+      "upgrade_preview_type": "None",
+      "upgrade_preview_cost": "1",
+      "upgrade_preview_star_cost": null,
       "upgrade_preview_description": "Deal 9 damage.",
       "keywords": []
     }

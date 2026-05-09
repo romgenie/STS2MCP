@@ -1241,6 +1241,7 @@ public static partial class McpMod
     /// </summary>
     private static Dictionary<string, object?> BuildCardInfo(CardModel card, PileType pile = PileType.None)
     {
+        var upgradedPreview = SafeBuildUpgradedCardPreview(card);
         return new Dictionary<string, object?>
         {
             ["id"] = card.Id.Entry,
@@ -1251,6 +1252,13 @@ public static partial class McpMod
             ["description"] = SafeGetCardDescription(card, pile),
             ["rarity"] = card.Rarity.ToString(),
             ["is_upgraded"] = card.IsUpgraded,
+            ["is_upgradable"] = card.IsUpgradable,
+            ["current_upgrade_level"] = card.CurrentUpgradeLevel,
+            ["max_upgrade_level"] = card.MaxUpgradeLevel,
+            ["upgrade_preview_type"] = card.UpgradePreviewType.ToString(),
+            ["upgrade_preview_cost"] = upgradedPreview != null ? GetCostDisplay(upgradedPreview) : null,
+            ["upgrade_preview_star_cost"] = upgradedPreview != null ? GetStarCostDisplay(upgradedPreview) : null,
+            ["upgrade_preview_description"] = SafeGetCardUpgradePreviewDescription(card, pile),
             ["keywords"] = BuildHoverTips(card.HoverTips)
         };
     }

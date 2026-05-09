@@ -213,6 +213,7 @@ def audit_static_glossary_scope(repo: Path) -> None:
 
 def audit_static_card_glossary_metadata(repo: Path) -> None:
     fork_endpoints = (repo / "McpMod.ForkEndpoints.cs").read_text(encoding="utf-8")
+    state_builder = (repo / "McpMod.StateBuilder.cs").read_text(encoding="utf-8")
     match = re.search(
         r"private static void AddCardsFromPool\(.*?\n    internal static object BuildGlossaryRelics\(\)",
         fork_endpoints,
@@ -226,13 +227,41 @@ def audit_static_card_glossary_metadata(repo: Path) -> None:
         "current_upgrade_level",
         "max_upgrade_level",
         "upgrade_preview_type",
+        "upgrade_preview_cost",
+        "upgrade_preview_star_cost",
         "upgrade_preview_description",
-        "GetDescriptionForUpgradePreview",
+        "SafeGetCardUpgradePreviewDescription",
     ]
     missing = [field for field in required if field not in body]
     if missing:
         fail(f"card glossary missing upgrade metadata: {missing}")
-    print("glossary: card upgrade metadata enforced")
+
+    state_match = re.search(
+        r"private static Dictionary<string, object\?> BuildCardInfo\(.*?\n    private static Dictionary<string, object\?> BuildCardState\(",
+        state_builder,
+        re.S,
+    )
+    if not state_match:
+        fail("could not locate BuildCardInfo for card metadata audit")
+    state_body = state_match.group(0)
+    missing_state = [field for field in required if field not in state_body]
+    if missing_state:
+        fail(f"state card serialization missing upgrade metadata: {missing_state}")
+
+    helpers = (repo / "McpMod.Helpers.cs").read_text(encoding="utf-8")
+    helper_match = re.search(
+        r"private static CardModel\? SafeBuildUpgradedCardPreview\(.*?\n    private static string\? SafeGetCardUpgradePreviewDescription\(",
+        helpers,
+        re.S,
+    )
+    if not helper_match:
+        fail("could not locate upgraded card preview helper")
+    helper_body = helper_match.group(0)
+    helper_required = ["ToMutable", "MutableClone", "UpgradeInternal"]
+    missing_helper = [field for field in helper_required if field not in helper_body]
+    if missing_helper:
+        fail(f"upgraded card preview helper missing clone/upgrade path: {missing_helper}")
+    print("cards: upgrade metadata enforced for glossary and state payloads")
 
 
 def audit_static_save_roots(repo: Path) -> None:

@@ -278,6 +278,7 @@ public static partial class McpMod
             else
                 costDisplay = card.EnergyCost.GetAmountToSpend().ToString();
 
+            var upgradedPreview = SafeBuildUpgradedCardPreview(card);
             result.Add(new Dictionary<string, object?>
             {
                 ["id"] = id,
@@ -291,9 +292,9 @@ public static partial class McpMod
                 ["current_upgrade_level"] = card.CurrentUpgradeLevel,
                 ["max_upgrade_level"] = card.MaxUpgradeLevel,
                 ["upgrade_preview_type"] = card.UpgradePreviewType.ToString(),
-                ["upgrade_preview_description"] = card.IsUpgradable
-                    ? SafeGetText(() => card.GetDescriptionForUpgradePreview())
-                    : null,
+                ["upgrade_preview_cost"] = upgradedPreview != null ? GetCostDisplay(upgradedPreview) : null,
+                ["upgrade_preview_star_cost"] = upgradedPreview != null ? GetStarCostDisplay(upgradedPreview) : null,
+                ["upgrade_preview_description"] = SafeGetCardUpgradePreviewDescription(card),
                 ["keywords"] = BuildHoverTips(card.HoverTips)
             });
         }
