@@ -211,6 +211,23 @@ def audit_static_glossary_scope(repo: Path) -> None:
     print("glossary: active-run shared/scoped pools enforced")
 
 
+def audit_static_save_roots(repo: Path) -> None:
+    compendium = (repo / "McpMod.Compendium.cs").read_text(encoding="utf-8")
+    match = re.search(
+        r"private static IEnumerable<string> EnumerateSaveRoots\(\).*?\n    private static IEnumerable<string> EnumerateSteamDataRoots\(\)",
+        compendium,
+        re.S,
+    )
+    if not match:
+        fail("could not locate EnumerateSaveRoots for save-root audit")
+    body = match.group(0)
+    if "accountRoots.Count == 1" in body or "yielded.Count > 0" in body:
+        fail("save-root fallback must search all Steam account roots after the active account")
+    if "Directory.GetDirectories(steamRoot)" not in body:
+        fail("save-root fallback must enumerate Steam account directories")
+    print("saves: multi-account fallback lookup enforced")
+
+
 def audit_state_surface(repo: Path) -> None:
     state_builder = (repo / "McpMod.StateBuilder.cs").read_text(encoding="utf-8")
     multiplayer_state = (repo / "McpMod.MultiplayerState.cs").read_text(encoding="utf-8")
@@ -378,6 +395,7 @@ def main() -> None:
     audit_static_formatters(repo)
     audit_static_error_shapes(repo)
     audit_static_glossary_scope(repo)
+    audit_static_save_roots(repo)
     audit_state_surface(repo)
     if not args.skip_live:
         audit_live(args.base_url)
