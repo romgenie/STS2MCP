@@ -8,6 +8,7 @@ from a checkout without installing the MCP package.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import sys
@@ -126,6 +127,34 @@ def audit_action_surface(repo: Path) -> None:
         fail(f"implemented actions missing docs: {missing_docs}")
 
     print(f"actions: {len(sp_actions)} singleplayer, {len(mp_actions)} multiplayer actions covered")
+
+
+def audit_mcp_tool_docs(repo: Path) -> None:
+    server_path = repo / "mcp" / "server.py"
+    server = server_path.read_text(encoding="utf-8")
+    readme = (repo / "mcp" / "README.md").read_text(encoding="utf-8")
+    module = ast.parse(server, filename=str(server_path))
+
+    tools: list[str] = []
+    for node in module.body:
+        if not isinstance(node, ast.AsyncFunctionDef):
+            continue
+        if any(
+            isinstance(decorator, ast.Call)
+            and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == "tool"
+            for decorator in node.decorator_list
+        ):
+            tools.append(node.name)
+
+    missing_readme = [
+        tool for tool in tools
+        if f"`{tool}(" not in readme and f"`{tool}()`" not in readme
+    ]
+    if missing_readme:
+        fail(f"MCP tools missing mcp/README.md entries: {missing_readme}")
+
+    print(f"mcp: {len(tools)} tools documented")
 
 
 def audit_static_formatters(repo: Path) -> None:
@@ -289,6 +318,7 @@ def main() -> None:
     repo = Path(__file__).resolve().parents[1]
     audit_docs(repo)
     audit_action_surface(repo)
+    audit_mcp_tool_docs(repo)
     audit_static_formatters(repo)
     audit_static_error_shapes(repo)
     audit_state_surface(repo)
