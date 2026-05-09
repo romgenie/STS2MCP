@@ -757,6 +757,28 @@ def audit_state_surface(repo: Path) -> None:
     for required_fragment in ["run_id", "current_run.save", "id_format", "progress_path", "resolved_progress_path", "profile_root", "save_scope"]:
         if required_fragment not in docs:
             fail(f"docs missing current_run context: {required_fragment}")
+    raw_full = (repo / "docs" / "raw-full.md").read_text(encoding="utf-8")
+    common_example_match = re.search(
+        r"### Common Top-Level Fields.*?\"current_run\": \{(.*?)\n  \},",
+        raw_full,
+        re.S,
+    )
+    if not common_example_match:
+        fail("docs/raw-full.md missing common current_run example")
+    common_current_run_example = common_example_match.group(1)
+    for required_fragment in [
+        "is_in_progress",
+        "profile_id",
+        "progress_path",
+        "resolved_progress_path",
+        "profile_root",
+        "save_scope",
+        "id_format",
+        "current_run.save exposes",
+        "start_time",
+    ]:
+        if required_fragment not in common_current_run_example:
+            fail(f"docs/raw-full.md common current_run example missing: {required_fragment}")
 
     state_types |= multiplayer_state_types
     missing_docs = sorted(state_type for state_type in state_types if state_type not in docs)

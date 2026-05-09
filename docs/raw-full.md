@@ -58,9 +58,16 @@ Every state JSON response includes `status: "ok"`, `kind` (`singleplayer_state` 
     "ascension": 0          // Ascension level
   },
   "current_run": {
+    "is_in_progress": true,
     "profile_id": 1,
+    "progress_path": "modded/profile1/saves/progress.save",
+    "resolved_progress_path": "C:/Users/timot/AppData/Roaming/SlayTheSpire2/steam/<account>/modded/profile1/saves/progress.save",
+    "profile_root": "modded/profile1",
     "save_scope": "modded",
+    "id_format": "{save_scope}:profile{profile_id}:{start_time}",
+    // Save-backed fields below are present when current_run.save exposes them.
     "run_id": "modded:profile1:1778295706",
+    "start_time": 1778295706,
     "seed": "2450ZAR9EF"
   },
   "player": { ... },        // Full player state (see Player Object below)
