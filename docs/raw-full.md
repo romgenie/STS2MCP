@@ -1098,7 +1098,7 @@ The glossary endpoints expose active-run pool metadata. They require a run in pr
 - `GET /api/v1/glossary/potions`: active-run potion pool metadata.
 - `GET /api/v1/glossary/keywords`: keyword metadata collected from active-run cards, relics, and potions.
 
-If no run is active, glossary endpoints return HTTP 409 with `error_code: "run_not_in_progress"` plus the same profile/save context fields so callers can identify the active profile even without a current run.
+If no run is active, glossary endpoints return HTTP 409 with `error_code: "run_not_in_progress"` plus the same profile/save context fields so callers can identify the active profile even without a current run. If a run is marked in progress but the run state cannot be read, they return HTTP 503 with `error_code: "run_state_unavailable"` plus the same profile/save context fields.
 
 Example success shape:
 

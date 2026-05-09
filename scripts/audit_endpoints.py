@@ -430,6 +430,9 @@ def audit_static_glossary_scope(repo: Path) -> None:
             fail(f"glossary success payload missing profile/save context: {required_fragment}")
         if required_fragment not in docs:
             fail(f"docs missing glossary profile/save context: {required_fragment}")
+    for required_fragment in ["run_not_in_progress", "run_state_unavailable", "HTTP 503"]:
+        if required_fragment not in docs:
+            fail(f"docs missing glossary error contract: {required_fragment}")
 
     print("glossary: active-run shared/scoped pools and profile context enforced")
 
@@ -1231,11 +1234,12 @@ def audit_live(base_url: str) -> None:
             if monster_ids != sorted(monster_ids) or encounter_ids != sorted(encounter_ids):
                 fail(f"{path} expected deterministic id ordering")
 
-        if path.startswith("/api/v1/glossary/") and status not in {200, 409}:
-            fail(f"{path} expected HTTP 200 or 409, got {status}: {data}")
-        if path.startswith("/api/v1/glossary/") and status == 409:
-            if not isinstance(data, dict) or data.get("error_code") != "run_not_in_progress":
-                fail(f"{path} expected run_not_in_progress glossary error, got {data}")
+        if path.startswith("/api/v1/glossary/") and status not in {200, 409, 503}:
+            fail(f"{path} expected HTTP 200, 409, or 503, got {status}: {data}")
+        if path.startswith("/api/v1/glossary/") and status in {409, 503}:
+            expected_code = "run_not_in_progress" if status == 409 else "run_state_unavailable"
+            if not isinstance(data, dict) or data.get("error_code") != expected_code:
+                fail(f"{path} expected {expected_code} glossary error, got {data}")
             assert_context_paths_normalized(path, data)
             for required_field in ["kind", "profile_id", "progress_path", "resolved_progress_path", "profile_root", "save_scope"]:
                 if required_field not in data:
