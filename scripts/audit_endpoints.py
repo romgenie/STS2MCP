@@ -214,6 +214,10 @@ def audit_static_error_shapes(repo: Path) -> None:
     for required_fragment in ["SaveManager.Instance", "Save manager is not available", "Settings data is not available", "status", "kind"]:
         if required_fragment not in settings_body:
             fail(f"settings endpoint missing startup-safe structured field: {required_fragment}")
+    mcp_mod = (repo / "McpMod.cs").read_text(encoding="utf-8")
+    for required_fragment in ["TryValidateStateFormat", "invalid_format", 'format is "json" or "markdown"']:
+        if required_fragment not in mcp_mod:
+            fail(f"state endpoints missing format validation: {required_fragment}")
     print("errors: structured 500 response helpers enforced")
 
 
@@ -1077,6 +1081,11 @@ def audit_live(base_url: str) -> None:
     markdown_status, markdown = load_text_url(base_url.rstrip("/") + "/api/v1/singleplayer?format=markdown")
     if markdown_status != 200 or "# Game State:" not in markdown:
         fail(f"/api/v1/singleplayer?format=markdown expected markdown state, got HTTP {markdown_status}: {markdown[:120]}")
+
+    status, data = load_json_url(base_url.rstrip("/") + "/api/v1/singleplayer?format=xml")
+    assert_error_body("/api/v1/singleplayer?format=xml", status, data)
+    if status != 400 or not isinstance(data, dict) or data.get("error_code") != "invalid_format":
+        fail(f"/api/v1/singleplayer?format=xml expected invalid_format HTTP 400, got HTTP {status}: {data}")
 
     post_validation_checks = [
         ("/api/v1/singleplayer", b"{", 400),

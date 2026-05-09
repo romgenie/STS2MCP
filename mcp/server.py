@@ -232,6 +232,7 @@ async def get_game_state(format: str = "markdown") -> str:
 
     Args:
         format: "markdown" for human-readable output, "json" for structured data.
+            Other values return the endpoint's invalid_format error.
     """
     try:
         return await _get({"format": format})
@@ -921,6 +922,7 @@ async def mp_get_game_state(format: str = "markdown") -> str:
 
     Args:
         format: "markdown" for human-readable output, "json" for structured data.
+            Other values return the endpoint's invalid_format error.
     """
     try:
         return await _mp_get({"format": format})

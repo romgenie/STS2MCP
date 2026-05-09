@@ -440,6 +440,8 @@ public static partial class McpMod
     private static void HandleGetMultiplayerState(HttpListenerRequest request, HttpListenerResponse response)
     {
         string format = request.QueryString["format"] ?? "json";
+        if (!TryValidateStateFormat(response, format))
+            return;
 
         try
         {
@@ -533,6 +535,8 @@ public static partial class McpMod
     private static void HandleGetState(HttpListenerRequest request, HttpListenerResponse response)
     {
         string format = request.QueryString["format"] ?? "json";
+        if (!TryValidateStateFormat(response, format))
+            return;
 
         try
         {
@@ -565,6 +569,15 @@ public static partial class McpMod
             }
             catch { /* response may be unusable */ }
         }
+    }
+
+    private static bool TryValidateStateFormat(HttpListenerResponse response, string format)
+    {
+        if (format is "json" or "markdown")
+            return true;
+
+        SendError(response, 400, "Invalid format. Use: json, markdown", "invalid_format");
+        return false;
     }
 
     private static void HandlePostAction(HttpListenerRequest request, HttpListenerResponse response)

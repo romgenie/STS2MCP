@@ -32,6 +32,8 @@ The singleplayer and multiplayer endpoints are mutually exclusive: calling singl
 |-----------|--------------------|---------|-----------------|
 | `format`  | `json`, `markdown` | `json`  | Response format |
 
+Unsupported `format` values return HTTP 400 with `error_code: "invalid_format"` instead of falling back to JSON.
+
 ### Common Top-Level Fields
 
 Every response (except `menu`) includes these top-level fields alongside the state-specific data:

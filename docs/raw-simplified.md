@@ -27,6 +27,8 @@ Singleplayer and multiplayer endpoints are mutually exclusive (HTTP 409 if misma
 |-----------|--------------------|---------|-----------------|
 | `format`  | `json`, `markdown` | `json`  | Response format |
 
+Unsupported `format` values return HTTP 400 with `error_code: "invalid_format"`.
+
 ## GET — State Types
 
 Every JSON response includes:
