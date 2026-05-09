@@ -1633,13 +1633,45 @@ def audit_live(base_url: str) -> None:
             profiles = data.get("profiles")
             if not isinstance(profiles, list) or data.get("count") != len(profiles):
                 fail(f"{path} expected profiles list with matching count, got {data}")
+            if data.get("count") != 3:
+                fail(f"{path} expected exactly three profile slots, got {data.get('count')}")
+            current_profile_id = data.get("current_profile_id")
+            if not isinstance(current_profile_id, int) or current_profile_id not in {1, 2, 3}:
+                fail(f"{path} expected current_profile_id 1-3, got {current_profile_id!r}")
+            seen_profile_ids: list[int] = []
+            current_slots = 0
             for profile_slot in profiles:
                 if not isinstance(profile_slot, dict):
                     fail(f"{path} expected profile slot objects, got {profile_slot}")
                 assert_context_paths_normalized(f"{path}.profiles[]", profile_slot)
-                for required_field in ["id", "profile_id", "is_current", "has_data", "progress_path", "resolved_progress_path", "profile_root", "save_scope"]:
+                for required_field in ["id", "profile_id", "is_current", "has_data", "path", "resolved_path", "progress_path", "resolved_progress_path", "profile_root", "save_scope"]:
                     if required_field not in profile_slot:
                         fail(f"{path} profile slot missing field {required_field}: {profile_slot}")
+                if not isinstance(profile_slot["id"], int) or not isinstance(profile_slot["profile_id"], int):
+                    fail(f"{path} profile slot id/profile_id should be ints: {profile_slot}")
+                if profile_slot["id"] != profile_slot["profile_id"] or profile_slot["id"] not in {1, 2, 3}:
+                    fail(f"{path} profile slot id/profile_id mismatch or out of range: {profile_slot}")
+                seen_profile_ids.append(profile_slot["profile_id"])
+                if not isinstance(profile_slot["is_current"], bool) or not isinstance(profile_slot["has_data"], bool):
+                    fail(f"{path} profile slot flags should be bools: {profile_slot}")
+                if profile_slot["is_current"]:
+                    current_slots += 1
+                    if profile_slot["profile_id"] != current_profile_id:
+                        fail(f"{path} current slot does not match current_profile_id: {profile_slot} vs {current_profile_id}")
+                for field in ["path", "resolved_path", "progress_path", "resolved_progress_path", "profile_root", "save_scope"]:
+                    if not isinstance(profile_slot[field], str) or not profile_slot[field]:
+                        fail(f"{path} profile slot field {field} should be a non-empty string: {profile_slot}")
+                if profile_slot["path"] != profile_slot["progress_path"]:
+                    fail(f"{path} profile slot path/progress_path mismatch: {profile_slot}")
+                if profile_slot["resolved_path"] != profile_slot["resolved_progress_path"]:
+                    fail(f"{path} profile slot resolved path mismatch: {profile_slot}")
+                expected_root_suffix = f"profile{profile_slot['profile_id']}"
+                if not profile_slot["profile_root"].endswith(expected_root_suffix):
+                    fail(f"{path} profile slot root should end with {expected_root_suffix}: {profile_slot}")
+            if sorted(seen_profile_ids) != [1, 2, 3]:
+                fail(f"{path} expected profile slots 1, 2, 3, got {seen_profile_ids}")
+            if current_slots != 1:
+                fail(f"{path} expected exactly one current profile slot, got {current_slots}")
         if path == "/api/v1/bestiary":
             if not isinstance(data, dict) or data.get("status") != "ok" or data.get("kind") != "bestiary":
                 fail(f"{path} expected structured bestiary status/kind, got {data}")
