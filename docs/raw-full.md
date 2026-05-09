@@ -7,6 +7,9 @@ HTTP API served by the STS2_MCP mod on `localhost:15526`. No authentication. Loc
 - `POST /api/v1/singleplayer` — perform a game action
 - `GET  /api/v1/multiplayer` — read multiplayer game state
 - `POST /api/v1/multiplayer` — perform a multiplayer action
+- `GET  /api/v1/profile` — read current profile progress
+- `GET  /api/v1/profiles` — list profile slots
+- `POST /api/v1/profiles` — switch or delete profile slots
 
 The endpoints are mutually exclusive: calling singleplayer during a multiplayer run (or vice versa) returns HTTP 409.
 
@@ -96,7 +99,8 @@ Always present at the top level (except `menu`). Contains everything about the l
       "target_type": "None", // None, Self, AnyEnemy, AnyAlly, AnyPlayer, etc.
       "keywords": [ /* Keyword Objects */ ]
     }
-  ]
+  ],
+  "max_potion_slots": 3      // Belt capacity. Default 3, grows with belt-expanding relics (e.g. Potion Belt: +2). Use to detect a full belt: len(potions) >= max_potion_slots.
 }
 ```
 
@@ -178,9 +182,142 @@ No run in progress.
 ```jsonc
 {
   "state_type": "menu",
-  "message": "No run in progress. Player is in the main menu."
+  "message": "No run in progress. Player is in the main menu.",
+  "menu_screen": "main",
+  "options": ["continue", "singleplayer", "multiplayer", "compendium", "timeline", "settings", "quit"]
 }
 ```
+
+Use `menu_select` with one of the advertised options. Options are accepted case-insensitively.
+If a visible option is intentionally withheld from automation, the state may also include `blocked_options` with a reason. For example, Timeline can be blocked while obtained epochs still need manual reveal because opening that game state through automation can trigger invalid unlock-state errors.
+
+Menu sub-screens expose their own options:
+
+- `singleplayer`: `standard`, `daily`, `custom`, `back`
+- `multiplayer`: `host`, `join`, `load`, `abandon`, `back`
+- `multiplayer_host`: `standard`, `daily`, `custom`, `back`
+- `multiplayer_join`: `refresh`, `back`, `join_<index>`, `join_<player_id>`
+- `multiplayer_load_lobby`: `confirm` / `embark`, `unready`, `back`
+- `profile_select`: `profile_1`, `profile_2`, `profile_3`, `back`
+- `character_select`: character IDs/names, `back`, `confirm` / `embark`, `unready` (MP, after readying)
+- `tutorial_prompt`: `no`, `yes`
+- `popup`: advertised popup button labels, normalized to lowercase words such as `ignore` or `back`
+- `timeline`: `advance`, `back`
+
+The `multiplayer` submenu is gated on whether a multiplayer save exists: with no save, `host` is shown and `load` / `abandon` are hidden; with a save, those are shown and `host` is hidden. `abandon` opens a vertical popup — the next state turn surfaces the popup's `confirm` / `cancel` options, not a transition.
+
+#### `multiplayer_join` — Friend list / FastMP
+
+```jsonc
+{
+  "state_type": "menu",
+  "menu_screen": "multiplayer_join",
+  "message": "Pick a friend to join, or 'refresh' to update the list.",
+  "fast_mp": false,             // true when --fastmp / Steam not initialized; auto-joins 127.0.0.1:33771
+  "loading": false,             // true while refreshing or while a join handshake is in flight
+  "no_friends": false,          // true when refresh returned an empty list
+  "friends": [
+    { "index": 0, "name": "Bob", "player_id": "76561198000000000", "enabled": true }
+  ],
+  "options": [
+    { "name": "join_0",  "enabled": true },
+    { "name": "refresh", "enabled": true },
+    { "name": "back",    "enabled": true }
+  ]
+}
+```
+
+`menu_select` accepts either `join_<index>` (e.g. `join_0`) or `join_<player_id>` (e.g. `join_76561198000000000`) — both click the same button. With `fast_mp: true`, the screen auto-joins localhost on open; you typically won't need to issue a join action in that mode.
+
+#### `multiplayer_load_lobby` — Resume saved MP run
+
+Reached via the `multiplayer` submenu's `load` option (host) or by joining a host that already loaded a save (client). Mirrors the standard MP character-select ready/unready flow but on a fixed (saved) party.
+
+```jsonc
+{
+  "state_type": "menu",
+  "menu_screen": "multiplayer_load_lobby",
+  "message": "Multiplayer load lobby. Confirm to ready up; ...",
+  "lobby": {
+    "type": "host",                // or "client"
+    "game_mode": "standard",       // or "daily" / "custom"
+    "ascension": 0,
+    "act": 2,
+    "floor": 13,
+    "character_id": "REGENT",      // local player's saved character
+    "current_hp": 64,
+    "max_hp": 80,
+    "gold": 240,
+    "expected_player_count": 3,
+    "connected_player_count": 2,
+    "players": [
+      {
+        "id": "76561198000000000",
+        "is_local": true,
+        "character_id": "REGENT",
+        "is_connected": true,
+        "is_ready": false,
+        "platform_name": "Alice"
+      }
+    ]
+  },
+  "options": [
+    { "name": "confirm", "enabled": true },
+    { "name": "embark",  "enabled": true },   // alias of confirm
+    { "name": "back",    "enabled": true },
+    { "name": "unready", "enabled": false }   // becomes enabled after confirm/embark
+  ]
+}
+```
+
+#### `character_select` — extended for MP
+
+The same screen drives SP, MP host, and MP client. In MP, an additional `lobby` block appears, and the `unready` option becomes available after the local player has hit `confirm`/`embark`:
+
+```jsonc
+{
+  "state_type": "menu",
+  "menu_screen": "character_select",
+  "message": "Select a character.",
+  "characters": [ /* same shape as SP */ ],
+  "lobby": {                       // present only in MP
+    "type": "host",                // "host" | "client" | "singleplayer"
+    "game_mode": "standard",       // "standard" | "daily" | "custom"
+    "max_players": 4,
+    "ascension": 0,
+    "max_ascension": 5,            // min across all lobby members' MaxMultiplayerAscension
+    "all_ready": false,
+    "is_about_to_begin": false,    // mirrors StartRunLobby.IsAboutToBeginGame()
+    "is_local_ready": false,
+    "local_player_id": "76561198000000000",
+    "player_count": 2,
+    "seed": "...",                 // optional, present only for daily/custom
+    "players": [
+      {
+        "id": "76561198000000000",
+        "slot_id": 0,
+        "is_local": true,
+        "is_host": true,           // only positively true for self when hosting; otherwise false
+        "character": "The Regent",
+        "character_id": "REGENT",
+        "is_ready": false,
+        "platform_name": "Alice"
+      }
+    ]
+  },
+  "options": [
+    { "name": "REGENT",  "enabled": true },
+    { "name": "IRONCLAD","enabled": true },
+    /* ... other characters and lockable RANDOM ... */
+    { "name": "confirm", "enabled": true },
+    { "name": "embark",  "enabled": true },
+    { "name": "back",    "enabled": true },
+    { "name": "unready", "enabled": false }
+  ]
+}
+```
+
+In SP the `lobby` field is omitted, and `unready` does not appear (the unready button is only enabled after MP ready).
 
 ### `unknown`
 
@@ -695,6 +832,24 @@ Boss relic selection. Pick is immediate.
 }
 ```
 
+### `game_over`
+
+Run has ended.
+
+```jsonc
+{
+  "state_type": "game_over",
+  "game_over": {
+    "message": "Run ended.",
+    "options": ["main_menu"]
+  },
+  "run": { ... },
+  "player": { ... }
+}
+```
+
+Use `menu_select` with `main_menu` to return to the main menu. `continue` is not advertised because it is not an actionable game-over option.
+
 ### `overlay` — Unhandled Overlay (catch-all)
 
 Prevents soft-locks when an unrecognized overlay is active.
@@ -713,6 +868,52 @@ Prevents soft-locks when an unrecognized overlay is active.
 
 ---
 
+## Profiles
+
+Profile endpoints are independent of the singleplayer and multiplayer run endpoints.
+
+### `GET /api/v1/profile`
+
+Returns the active profile's persistent progress summary, including character stats, card stats, encounter stats, discovered content, achievements, epochs, and global totals.
+
+### `GET /api/v1/profiles`
+
+Lists the three profile slots and identifies the active slot.
+
+```json
+{
+  "current_profile_id": 1,
+  "profiles": [
+    { "id": 1, "is_current": true, "has_data": true },
+    { "id": 2, "is_current": false, "has_data": false },
+    { "id": 3, "is_current": false, "has_data": true }
+  ]
+}
+```
+
+### `POST /api/v1/profiles`
+
+Switch to a profile slot through the game's profile UI:
+
+```json
+{ "action": "switch", "profile_id": 2 }
+```
+
+Delete an inactive profile slot:
+
+```json
+{ "action": "delete", "profile_id": 2 }
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `switch` or `delete` |
+| `profile_id` | int | Yes | Profile slot, from 1 to 3 |
+
+Switching is rejected during a run. Deleting the active profile is rejected; switch away first if you need to remove a slot.
+
+---
+
 ## POST — Perform Actions
 
 All POST requests use a JSON body with an `"action"` field and action-specific parameters.
@@ -728,6 +929,28 @@ All POST requests use a JSON body with an `"action"` field and action-specific p
 ```jsonc
 { "status": "error", "error": "Card requires a target. Provide 'target' with an entity_id." }
 ```
+
+---
+
+### `menu_select`
+
+Select an option from the main menu, a menu submenu, profile select, character select, tutorial prompt, blocking popup, timeline screen, or game-over screen.
+
+```json
+{ "action": "menu_select", "option": "singleplayer" }
+```
+
+```json
+{ "action": "menu_select", "option": "main_menu" }
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `option` | string | Yes | One of the current state's advertised menu options. Matching is case-insensitive. |
+| `seed` | string | No | Only supported in menu contexts that expose a real seeded flow. Standard singleplayer character select currently returns an error without starting a run when `seed` is supplied. |
+
+`game_over` advertises only `main_menu`. `continue` is not actionable on that screen and returns an error.
+If `timeline` is blocked by pending obtained epochs, `menu_select` returns an error with `manual_action_required: true` and `pending_epoch_ids` instead of opening Timeline.
 
 ---
 

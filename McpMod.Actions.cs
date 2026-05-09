@@ -37,6 +37,7 @@ using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
 using MegaCrit.Sts2.Core.Nodes.Screens.GameOverScreen;
 using MegaCrit.Sts2.Core.Nodes.Screens.Timeline;
+using MegaCrit.Sts2.Core.Nodes.Screens.ProfileScreen;
 using Godot;
 
 namespace STS2_MCP;
@@ -52,6 +53,10 @@ public static partial class McpMod
         var player = LocalContext.GetMe(runState);
         if (player == null)
             return Error("Could not find local player");
+
+        var tree = (Godot.Engine.GetMainLoop()) as SceneTree;
+        if (tree?.Root != null && IsAnyFtueVisible(tree.Root))
+            return Error("Blocking popup active. Use menu_select with one of the advertised popup options before gameplay actions.");
 
         return action switch
         {
@@ -420,7 +425,7 @@ public static partial class McpMod
     private static Dictionary<string, object?> ExecuteChooseMapNode(Dictionary<string, JsonElement> data)
     {
         var mapScreen = NMapScreen.Instance;
-        if (mapScreen == null || !mapScreen.IsOpen)
+        if (mapScreen == null || (!mapScreen.IsOpen && !IsNodeVisible(mapScreen)))
             return Error("Map screen is not open");
 
         if (!data.TryGetValue("index", out var indexElem))
@@ -1063,44 +1068,63 @@ public static partial class McpMod
 
     internal static Dictionary<string, object?> ExecuteMenuSelect(string option, string? seed = null)
     {
+        option = option.Trim();
+
+        if (string.IsNullOrEmpty(option))
+            return Error("Missing menu option");
+
         var tree = (Engine.GetMainLoop()) as SceneTree;
         if (tree?.Root == null)
             return Error("Cannot access scene tree");
 
-        // Game over screen
-        var gameOver = FindFirst<NGameOverScreen>(tree.Root);
+        // Game over screen. Prefer the active overlay stack entry so hidden or
+        // preloaded game-over nodes cannot hijack normal menu navigation.
+        var gameOver = NOverlayStack.Instance?.Peek() as NGameOverScreen;
+        gameOver ??= FindAll<NGameOverScreen>(tree.Root).FirstOrDefault(IsNodeVisible);
         if (gameOver != null)
         {
-            var fieldName = option.ToLower() switch
-            {
-                "continue" => "_continueButton",
-                "main_menu" => "_mainMenuButton",
-                _ => null
-            };
-            if (fieldName == null)
-                return Error($"Unknown game over option: {option}. Use: continue, main_menu");
+            if (string.Equals(option, "continue", System.StringComparison.OrdinalIgnoreCase))
+                return Error("Game-over option 'continue' is not actionable. Use: main_menu");
 
-            var btn = gameOver.GetType().GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(gameOver);
-            if (btn is NClickableControl clickable && clickable.IsEnabled)
+            if (!string.Equals(option, "main_menu", System.StringComparison.OrdinalIgnoreCase))
+                return Error($"Unknown game over option: {option}. Use: main_menu");
+
+            var result = ClickMenuButtonField(gameOver, "_mainMenuButton", "Returning to main menu");
+            if ((string?)result["status"] == "ok")
+                return result;
+
+            var returnMethod = gameOver.GetType().GetMethod(
+                "ReturnToMainMenu",
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Instance);
+            if (returnMethod != null)
             {
-                clickable.ForceClick();
-                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = $"Clicked {option}" };
+                returnMethod.Invoke(gameOver, null);
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Returning to main menu" };
             }
-            return Error($"Button '{option}' not available");
+
+            return Error("Game-over main_menu option is not available");
         }
 
-        // Tutorial/FTUE popup — "Enable Tutorials?" dialog
-        var tutorialFtue = FindFirst<MegaCrit.Sts2.Core.Nodes.Ftue.NAcceptTutorialsFtue>(tree.Root);
-        if (tutorialFtue != null && tutorialFtue.Visible)
+        // Tutorial/FTUE popup - "Enable Tutorials?" dialog
+        var tutorialFtue = FindVisibleAcceptTutorialsFtue(tree.Root);
+        if (tutorialFtue != null && IsFtueNodeActive(tutorialFtue))
         {
+            if (!string.Equals(option, "yes", System.StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(option, "no", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return Error($"Unknown tutorial prompt option: {option}. Use: yes, no");
+            }
+
             var popup = tutorialFtue.GetType().GetField("_verticalPopup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(tutorialFtue);
             if (popup != null)
             {
-                // "no" clicks No, "yes" clicks Yes, default to No
                 var isYes = string.Equals(option, "yes", System.StringComparison.OrdinalIgnoreCase);
                 var btnField = isYes ? "<YesButton>k__BackingField" : "<NoButton>k__BackingField";
                 var btn = popup.GetType().GetField(btnField, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(popup);
-                if (btn is NClickableControl clickable && clickable.IsEnabled)
+                if (btn is NClickableControl clickable &&
+                    IsPopupButtonActionable(clickable))
                 {
                     clickable.ForceClick();
                     return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = $"Tutorials: {(isYes ? "enabled" : "disabled")}" };
@@ -1109,31 +1133,51 @@ public static partial class McpMod
             return Error("Tutorial popup visible but buttons not accessible");
         }
 
-        // Any other FTUE/tutorial popup with a confirm button
-        var ftue = FindFirst<MegaCrit.Sts2.Core.Nodes.Ftue.NFtue>(tree.Root);
-        if (ftue != null && ftue.Visible)
+        // Any other FTUE/tutorial popup with a confirm button.
+        var ftue = FindVisibleGenericFtue(tree.Root);
+        if (ftue != null)
         {
-            var confirmBtn = ftue.GetType().GetField("_confirmButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(ftue);
-            if (confirmBtn is NClickableControl ftueClickable && ftueClickable.IsEnabled)
+            if (!string.Equals(option, "advance", System.StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(option, "proceed", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return Error($"Unknown tutorial option: {option}. Use: advance, proceed");
+            }
+
+            var ftueClickable = FindFtueAdvanceButton(ftue);
+            if (ftueClickable != null)
             {
                 ftueClickable.ForceClick();
                 return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Dismissed tutorial popup" };
             }
+
+            return Error("Tutorial popup visible but no actionable advance/proceed control is available; retry after the next state poll");
         }
 
-        // Timeline screen — advance through epoch reveals
+        // Generic blocking menu popups, such as the first-run warning that appears
+        // over character select on fresh profiles.
+        var verticalPopup = FindVisibleVerticalPopup(tree.Root);
+        if (verticalPopup != null)
+            return ExecutePopupOption(GetPopupOptions(verticalPopup), option);
+
+        var popupButtonOptions = GetVisiblePopupButtonOptions(tree.Root);
+        if (popupButtonOptions.Count > 0)
+            return ExecutePopupOption(popupButtonOptions, option);
+
+        // Timeline screen - advance through epoch reveals.
         var timelineScreen = FindFirst<NTimelineScreen>(tree.Root);
-        if (timelineScreen != null && timelineScreen.Visible)
+        if (timelineScreen != null && IsNodeVisible(timelineScreen))
         {
             if (string.Equals(option, "advance", System.StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(option, "proceed", System.StringComparison.OrdinalIgnoreCase))
             {
-                // Check for timeline tutorial screen (first-time "Proceed" button)
+                // Check for timeline tutorial screen (first-time "Proceed" button).
                 var tutorial = FindFirst<NTimelineTutorial>(tree.Root);
-                if (tutorial != null && tutorial.Visible)
+                if (tutorial != null && IsNodeVisible(tutorial))
                 {
                     var ackBtn = tutorial.GetType().GetField("_acknowledgeButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(tutorial);
-                    if (ackBtn is NClickableControl ackClickable && ackClickable.IsEnabled)
+                    if (ackBtn is NClickableControl ackClickable &&
+                        ackClickable.IsEnabled &&
+                        IsNodeVisible(ackClickable))
                     {
                         ackClickable.ForceClick();
                         return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Clicked tutorial proceed button" };
@@ -1142,7 +1186,7 @@ public static partial class McpMod
 
                 // Check for confirm button
                 var confirmBtn = FindFirst<NConfirmButton>(tree.Root);
-                if (confirmBtn != null && confirmBtn.Visible && confirmBtn.IsEnabled)
+                if (confirmBtn != null && IsNodeVisible(confirmBtn) && confirmBtn.IsEnabled)
                 {
                     confirmBtn.ForceClick();
                     return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Clicked confirm button" };
@@ -1150,18 +1194,20 @@ public static partial class McpMod
 
                 // Check for any clickable proceed button
                 var proceedBtn = FindFirst<NProceedButton>(tree.Root);
-                if (proceedBtn != null && proceedBtn.Visible && proceedBtn.IsEnabled)
+                if (proceedBtn != null && IsNodeVisible(proceedBtn) && proceedBtn.IsEnabled)
                 {
                     proceedBtn.ForceClick();
                     return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Clicked proceed button" };
                 }
 
-                // Check for inspect screen (epoch detail view) — close it
+                // Check for inspect screen (epoch detail view) - close it.
                 var inspectScreen = FindFirst<NEpochInspectScreen>(tree.Root);
-                if (inspectScreen != null && inspectScreen.Visible)
+                if (inspectScreen != null && IsNodeVisible(inspectScreen))
                 {
                     var closeBtn = inspectScreen.GetType().GetField("_closeButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(inspectScreen);
-                    if (closeBtn is NClickableControl closeClickable && closeClickable.IsEnabled)
+                    if (closeBtn is NClickableControl closeClickable &&
+                        closeClickable.IsEnabled &&
+                        IsNodeVisible(closeClickable))
                     {
                         closeClickable.ForceClick();
                         return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Closed epoch inspect screen" };
@@ -1170,34 +1216,22 @@ public static partial class McpMod
                     return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Closed epoch inspect screen" };
                 }
 
-                // Check for queued unlock screens
-                if (timelineScreen.IsScreenQueued())
-                {
-                    timelineScreen.OpenQueuedScreen();
-                    return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Opening queued unlock screen" };
-                }
+                // Check for queued unlock screens.
+                var queuedUnlockResult = TryHandleQueuedTimelineUnlock(timelineScreen);
+                if (queuedUnlockResult != null)
+                    return queuedUnlockResult;
 
-                // Find an obtained epoch slot to click
-                var slots = FindAll<NEpochSlot>(timelineScreen);
-                foreach (var slot in slots)
-                {
-                    if (slot.State.ToString() == "Obtained")
+                var unrevealedEpochs = GetProgressEpochIdsByState("Obtained", "ObtainedNoSlot");
+                if (unrevealedEpochs.Count > 0)
+                    return new Dictionary<string, object?>
                     {
-                        // Try RevealEpoch to properly transition the state
-                        var revealMethod = slot.GetType().GetMethod("RevealEpoch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                        if (revealMethod != null)
-                        {
-                            revealMethod.Invoke(slot, null);
-                            return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Revealing epoch" };
-                        }
-                        // Fallback: set state directly and open inspect
-                        slot.SetState(EpochSlotState.Complete);
-                        timelineScreen.OpenInspectScreen(slot, true);
-                        return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Force-revealing epoch" };
-                    }
-                }
+                        ["status"] = "ok",
+                        ["message"] = "Epoch unlocks are obtained but not revealed; not forcing timeline reveal from automation",
+                        ["pending_epoch_ids"] = unrevealedEpochs,
+                        ["manual_action_required"] = true,
+                        ["done"] = true
+                    };
 
-                // Nothing to advance
                 return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "No more epochs to advance", ["done"] = true };
             }
             else if (string.Equals(option, "back", System.StringComparison.OrdinalIgnoreCase))
@@ -1225,26 +1259,48 @@ public static partial class McpMod
             return Error($"Unknown timeline option: {option}. Use: advance, back");
         }
 
+        // Multiplayer Join Friend screen — friend list, refresh, back, or join_<index>/<player_id>.
+        var joinScreen = FindFirst<NJoinFriendScreen>(tree.Root);
+        if (joinScreen != null && IsNodeVisible(joinScreen))
+        {
+            return ExecuteJoinScreenMenuOption(joinScreen, option);
+        }
+
+        // Multiplayer Load Game lobby — confirm/embark/unready/back to resume saved MP run.
+        var loadLobby = FindFirst<NMultiplayerLoadGameScreen>(tree.Root);
+        if (loadLobby != null && IsNodeVisible(loadLobby))
+        {
+            return ExecuteLoadLobbyMenuOption(loadLobby, option);
+        }
+
+        // Character select can outlive or be mounted separately from NMainMenu,
+        // so handle it before main-menu-specific routing.
+        var charSelect = FindFirst<NCharacterSelectScreen>(tree.Root);
+        if (charSelect != null && IsNodeVisible(charSelect))
+        {
+            return ExecuteCharacterSelectMenuOption(charSelect, option, seed);
+        }
+
+        var profileScreen = FindFirst<NProfileScreen>(tree.Root);
+        if (profileScreen != null && IsNodeVisible(profileScreen))
+        {
+            return ExecuteProfileSelectMenuOption(profileScreen, option);
+        }
+
         // Main menu — click a menu button
         var mainMenu = FindFirst<NMainMenu>(tree.Root);
         if (mainMenu != null)
         {
             // Check if we're on singleplayer submenu
             var spSubmenu = FindFirst<NSingleplayerSubmenu>(tree.Root);
-            if (spSubmenu != null && spSubmenu.Visible)
+            if (spSubmenu != null && IsNodeVisible(spSubmenu))
             {
                 if (string.Equals(option, "back", System.StringComparison.OrdinalIgnoreCase))
                 {
-                    var backBtn = spSubmenu.GetType().GetField("_backButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(spSubmenu);
-                    if (backBtn is NClickableControl backClickable && backClickable.IsEnabled)
-                    {
-                        backClickable.ForceClick();
-                        return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Going back" };
-                    }
-                    return Error("Back button not available");
+                    return ClickMenuButtonField(spSubmenu, "_backButton", "Going back", "Back button is not available");
                 }
 
-                var fieldName = option.ToLower() switch
+                var fieldName = option.ToLowerInvariant() switch
                 {
                     "standard" => "_standardButton",
                     "daily" => "_dailyButton",
@@ -1254,72 +1310,64 @@ public static partial class McpMod
                 if (fieldName == null)
                     return Error($"Unknown singleplayer option: {option}. Use: standard, daily, custom, back");
 
-                var btn = spSubmenu.GetType().GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(spSubmenu);
-                if (btn is NClickableControl clickable)
-                {
-                    if (!clickable.IsEnabled)
-                        return Error($"Option '{option}' is not available (locked)");
-                    clickable.ForceClick();
-                    return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = $"Selected {option}" };
-                }
-                return Error($"Could not find button for '{option}'");
+                return ClickMenuButtonField(spSubmenu, fieldName, $"Selected {option}", $"Option '{option}' is not available (locked)");
             }
 
-            // Check if we're on character select
-            var charSelect = FindFirst<NCharacterSelectScreen>(tree.Root);
-            if (charSelect != null && charSelect.Visible)
+            // Check if we're on multiplayer host submenu
+            var mpHostSubmenu = FindFirst<NMultiplayerHostSubmenu>(tree.Root);
+            if (mpHostSubmenu != null && IsNodeVisible(mpHostSubmenu))
             {
-                // "back" clicks the back/unready button
                 if (string.Equals(option, "back", System.StringComparison.OrdinalIgnoreCase))
                 {
-                    var backBtn = charSelect.GetType().GetField("_backButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(charSelect)
-                        ?? charSelect.GetType().GetField("_unreadyButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(charSelect);
-                    if (backBtn is NClickableControl backClickable && backClickable.IsEnabled)
-                    {
-                        backClickable.ForceClick();
-                        return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Going back" };
-                    }
-                    return Error("Back button not available");
+                    return ClickMenuButtonField(mpHostSubmenu, "_backButton", "Going back", "Back button is not available");
                 }
 
-                // "confirm" or "embark" clicks the embark button to start the run
-                if (string.Equals(option, "confirm", System.StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(option, "embark", System.StringComparison.OrdinalIgnoreCase))
+                var fieldName = option.ToLowerInvariant() switch
                 {
-                    // Set seed before embarking if provided
-                    if (!string.IsNullOrEmpty(seed) && charSelect.Lobby != null)
-                    {
-                        charSelect.Lobby.SetSeed(seed);
-                    }
+                    "standard" => "_standardButton",
+                    "daily" => "_dailyButton",
+                    "custom" => "_customButton",
+                    _ => null
+                };
+                if (fieldName == null)
+                    return Error($"Unknown multiplayer host option: {option}. Use: standard, daily, custom, back");
 
-                    var embarkBtn = charSelect.GetType().GetField("_embarkButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(charSelect);
-                    if (embarkBtn is NClickableControl embarkClickable && embarkClickable.IsEnabled)
-                    {
-                        var msg = string.IsNullOrEmpty(seed) ? "Embarking on run" : $"Embarking on run (seed: {seed})";
-                        embarkClickable.ForceClick();
-                        return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = msg };
-                    }
-                    return Error("Embark button not available — select a character first");
-                }
+                return ClickMenuButtonField(mpHostSubmenu, fieldName, $"Selected {option}", $"Option '{option}' is not available (locked)");
+            }
 
-                var buttons = FindAll<NCharacterSelectButton>(charSelect);
-                foreach (var btn in buttons)
+            // Check if we're on multiplayer submenu
+            var mpSubmenu = FindFirst<NMultiplayerSubmenu>(tree.Root);
+            if (mpSubmenu != null && IsNodeVisible(mpSubmenu))
+            {
+                if (string.Equals(option, "back", System.StringComparison.OrdinalIgnoreCase))
                 {
-                    if (btn.Character != null && (
-                        string.Equals(btn.Character.Id.Entry, option, System.StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(SafeGetText(() => btn.Character.Title), option, System.StringComparison.OrdinalIgnoreCase)))
-                    {
-                        if (btn.IsLocked)
-                            return Error($"Character '{option}' is locked");
-                        btn.Select();
-                        return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = $"Selected {SafeGetText(() => btn.Character.Title)}. Use 'confirm' to embark." };
-                    }
+                    return ClickMenuButtonField(mpSubmenu, "_backButton", "Going back", "Back button is not available");
                 }
-                return Error($"Character '{option}' not found. Available: {string.Join(", ", buttons.Where(b => !b.IsLocked).Select(b => b.Character?.Id.Entry))}");
+
+                var fieldName = option.ToLowerInvariant() switch
+                {
+                    "host" => "_hostButton",
+                    "join" => "_joinButton",
+                    "load" => "_loadButton",
+                    "abandon" => "_abandonButton",
+                    _ => null
+                };
+                if (fieldName == null)
+                    return Error($"Unknown multiplayer option: {option}. Use: host, join, load, abandon, back");
+
+                return ClickMenuButtonField(mpSubmenu, fieldName, $"Selected {option}", $"Option '{option}' is not available");
             }
 
             // Main menu buttons
-            var menuFieldName = option.ToLower() switch
+            var normalizedMainMenuOption = option.ToLowerInvariant();
+            if (normalizedMainMenuOption == "timeline")
+            {
+                var unrevealedEpochs = GetProgressEpochIdsByState("Obtained", "ObtainedNoSlot");
+                if (unrevealedEpochs.Count > 0)
+                    return TimelineUnlocksNeedManualReveal(unrevealedEpochs);
+            }
+
+            var menuFieldName = normalizedMainMenuOption switch
             {
                 "singleplayer" => "_singleplayerButton",
                 "multiplayer" => "_multiplayerButton",
@@ -1327,23 +1375,508 @@ public static partial class McpMod
                 "timeline" => "_timelineButton",
                 "settings" => "_settingsButton",
                 "continue" => "_continueButton",
+                "abandon_run" => "_abandonRunButton",
                 "quit" => "_quitButton",
                 _ => null
             };
             if (menuFieldName == null)
                 return Error($"Unknown menu option: {option}");
 
-            var menuBtn = mainMenu.GetType().GetField(menuFieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(mainMenu);
-            if (menuBtn is NClickableControl menuClickable)
-            {
-                if (!menuClickable.IsEnabled)
-                    return Error($"Option '{option}' is not available");
-                menuClickable.ForceClick();
-                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = $"Selected {option}" };
-            }
-            return Error($"Could not find button for '{option}'");
+            return ClickMenuButtonField(mainMenu, menuFieldName, $"Selected {option}", $"Option '{option}' is not available");
         }
 
         return Error("Not on a menu screen");
+    }
+
+    private static Dictionary<string, object?> TimelineUnlocksNeedManualReveal(List<string> unrevealedEpochs)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["status"] = "error",
+            ["error"] = "Timeline has obtained epochs that still need to be revealed manually; not opening Timeline because this game state logs invalid unlock-state errors when entered through automation",
+            ["pending_epoch_ids"] = unrevealedEpochs,
+            ["manual_action_required"] = true
+        };
+    }
+
+    private static Dictionary<string, object?> ExecutePopupOption(
+        List<(string Name, NClickableControl Button)> options,
+        string option)
+    {
+        foreach (var candidate in options)
+        {
+            if (!string.Equals(candidate.Name, option, System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!IsPopupButtonActionable(candidate.Button))
+                return Error($"Popup option '{candidate.Name}' is disabled");
+
+            candidate.Button.ForceClick();
+            return new Dictionary<string, object?>
+            {
+                ["status"] = "ok",
+                ["message"] = $"Selected popup option: {candidate.Name}"
+            };
+        }
+
+        return Error($"Popup option '{option}' is not actionable. Use: {string.Join(", ", options.Select(candidate => candidate.Name))}");
+    }
+
+    private static Dictionary<string, object?> ExecuteProfileSelectMenuOption(
+        NProfileScreen profileScreen,
+        string option)
+    {
+        if (string.Equals(option, "back", System.StringComparison.OrdinalIgnoreCase))
+        {
+            var backBtn = GetInstanceFieldValue(profileScreen, "_backButton")
+                ?? FindFirst<NBackButton>(profileScreen);
+            if (backBtn is NClickableControl backClickable &&
+                backClickable.IsEnabled &&
+                IsNodeVisible(backClickable))
+            {
+                backClickable.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Going back from profile select" };
+            }
+            return Error("Back button not available on profile select");
+        }
+
+        var normalized = option.ToLowerInvariant();
+        if (normalized.StartsWith("profile_", System.StringComparison.Ordinal))
+            normalized = normalized["profile_".Length..];
+        else if (normalized.StartsWith("slot_", System.StringComparison.Ordinal))
+            normalized = normalized["slot_".Length..];
+
+        if (int.TryParse(normalized, out var profileId))
+            return ExecuteProfileAction("switch", profileId);
+
+        return Error($"Unknown profile select option: {option}. Use: profile_1, profile_2, profile_3, back");
+    }
+
+    private static Dictionary<string, object?> ExecuteJoinScreenMenuOption(
+        NJoinFriendScreen joinScreen,
+        string option)
+    {
+        var normalized = option.ToLowerInvariant();
+
+        if (normalized == "back")
+        {
+            return ClickMenuButtonField(joinScreen, "_backButton", "Going back from join screen", "Back button is not available");
+        }
+
+        if (normalized == "refresh")
+        {
+            var refreshBtn = GetInstanceFieldValue(joinScreen, "_refreshButton") as NClickableControl;
+            if (refreshBtn != null && refreshBtn.IsEnabled && IsNodeVisible(refreshBtn))
+            {
+                refreshBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Refreshing friend list" };
+            }
+            return Error("Refresh button not available");
+        }
+
+        // join_<index> or join_<player_id>
+        if (normalized.StartsWith("join_", System.StringComparison.Ordinal))
+        {
+            var key = normalized["join_".Length..];
+            var buttonContainer = GetInstanceFieldValue(joinScreen, "_buttonContainer") as Control;
+            if (buttonContainer == null)
+                return Error("Friend list container not available");
+
+            // Build the in-order friend list once
+            var friendButtons = new List<NJoinFriendButton>();
+            foreach (var child in buttonContainer.GetChildren())
+            {
+                if (child is NJoinFriendButton fbtn)
+                    friendButtons.Add(fbtn);
+            }
+
+            if (friendButtons.Count == 0)
+                return Error("No friends with open lobbies. Use 'refresh' to retry.");
+
+            // Try as index first
+            if (int.TryParse(key, out int idx))
+            {
+                if (idx < 0 || idx >= friendButtons.Count)
+                    return Error($"Friend index {idx} out of range (0..{friendButtons.Count - 1})");
+                if (!friendButtons[idx].IsEnabled)
+                    return Error($"Friend at index {idx} is not joinable right now");
+                friendButtons[idx].ForceClick();
+                return new Dictionary<string, object?>
+                {
+                    ["status"] = "ok",
+                    ["message"] = $"Joining friend at index {idx}"
+                };
+            }
+
+            // Otherwise treat as ulong player id
+            if (ulong.TryParse(key, out ulong playerId))
+            {
+                var match = friendButtons.FirstOrDefault(b => b.PlayerId == playerId);
+                if (match == null)
+                    return Error($"No friend with player_id {playerId} in current list. Available indices: 0..{friendButtons.Count - 1}");
+                if (!match.IsEnabled)
+                    return Error($"Friend {playerId} is not joinable right now");
+                match.ForceClick();
+                return new Dictionary<string, object?>
+                {
+                    ["status"] = "ok",
+                    ["message"] = $"Joining friend {playerId}"
+                };
+            }
+
+            return Error($"Unknown join target: '{key}'. Use join_<index> (e.g. join_0) or join_<player_id>.");
+        }
+
+        return Error($"Unknown join screen option: {option}. Use: refresh, back, join_<index>, join_<player_id>");
+    }
+
+    private static Dictionary<string, object?> ExecuteLoadLobbyMenuOption(
+        NMultiplayerLoadGameScreen loadLobby,
+        string option)
+    {
+        var normalized = option.ToLowerInvariant();
+
+        if (normalized == "confirm" || normalized == "embark" || normalized == "ready")
+        {
+            var confirmBtn = GetInstanceFieldValue(loadLobby, "_confirmButton") as NClickableControl;
+            if (confirmBtn != null && confirmBtn.IsEnabled && IsNodeVisible(confirmBtn))
+            {
+                confirmBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Readied up to load saved MP run" };
+            }
+            return Error("Confirm button not available — already ready, or lobby not yet initialized");
+        }
+
+        if (normalized == "unready")
+        {
+            var unreadyBtn = GetInstanceFieldValue(loadLobby, "_unreadyButton") as NClickableControl;
+            if (unreadyBtn != null && unreadyBtn.IsEnabled && IsNodeVisible(unreadyBtn))
+            {
+                unreadyBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Retracted ready vote" };
+            }
+            return Error("Unready button not available — you have not confirmed yet");
+        }
+
+        if (normalized == "back")
+        {
+            return ClickMenuButtonField(loadLobby, "_backButton", "Going back from load lobby", "Back button is not available");
+        }
+
+        return Error($"Unknown load lobby option: {option}. Use: confirm, embark, unready, back");
+    }
+
+    private static Dictionary<string, object?> ExecuteCharacterSelectMenuOption(
+        NCharacterSelectScreen charSelect,
+        string option,
+        string? seed)
+    {
+        if (string.Equals(option, "back", System.StringComparison.OrdinalIgnoreCase))
+        {
+            // _backButton leaves the lobby (and disconnects in MP). _unreadyButton is a
+            // separate control that only becomes enabled after the player has hit
+            // confirm/embark in MP — it retracts the ready vote without leaving. Surface
+            // them as distinct options so callers can pick deliberately. Fall back to
+            // unready when only it is actionable so older callers don't get stuck.
+            var backBtn = GetInstanceFieldValue(charSelect, "_backButton") as NClickableControl;
+            if (backBtn != null && backBtn.IsEnabled && IsControlVisibleOrActionable(backBtn))
+            {
+                backBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Going back" };
+            }
+            var unreadyFallback = GetInstanceFieldValue(charSelect, "_unreadyButton") as NClickableControl;
+            if (unreadyFallback != null && unreadyFallback.IsEnabled && IsControlVisibleOrActionable(unreadyFallback))
+            {
+                unreadyFallback.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Retracted ready vote (back fell through to unready)" };
+            }
+            return Error("Back button not available");
+        }
+
+        if (string.Equals(option, "unready", System.StringComparison.OrdinalIgnoreCase))
+        {
+            var unreadyBtn = GetInstanceFieldValue(charSelect, "_unreadyButton") as NClickableControl;
+            if (unreadyBtn != null && unreadyBtn.IsEnabled && IsControlVisibleOrActionable(unreadyBtn))
+            {
+                unreadyBtn.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = "Retracted ready vote" };
+            }
+            return Error("Unready button not available — you have not confirmed yet");
+        }
+
+        if (string.Equals(option, "confirm", System.StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(option, "embark", System.StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(seed))
+            {
+                seed = seed.Trim();
+                if (charSelect.Lobby == null)
+                {
+                    return Error("Seeded embark is not supported for standard singleplayer from this API. Seed was not applied and the run was not started.");
+                }
+
+                try
+                {
+                    charSelect.Lobby.SetSeed(seed);
+                }
+                catch (System.Exception ex)
+                {
+                    return Error($"Seeded embark failed before starting the run: {ex.Message}");
+                }
+            }
+
+            var embarkBtn = GetInstanceFieldValue(charSelect, "_embarkButton");
+            if (embarkBtn is NClickableControl embarkClickable && embarkClickable.IsEnabled)
+            {
+                var msg = string.IsNullOrEmpty(seed) ? "Embarking on run" : $"Embarking on run (seed: {seed})";
+                embarkClickable.ForceClick();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = msg };
+            }
+            return Error("Embark button not available — select a character first");
+        }
+
+        var buttons = FindAll<NCharacterSelectButton>(charSelect);
+        foreach (var btn in buttons)
+        {
+            if (btn.Character != null && (
+                string.Equals(btn.Character.Id.Entry, option, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(SafeGetText(() => btn.Character.Title), option, System.StringComparison.OrdinalIgnoreCase)))
+            {
+                if (btn.IsLocked)
+                    return Error($"Character '{option}' is locked");
+                btn.Select();
+                return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = $"Selected {SafeGetText(() => btn.Character.Title)}. Use 'confirm' to embark." };
+            }
+        }
+        return Error($"Character '{option}' not found. Available: {string.Join(", ", buttons.Where(b => !b.IsLocked).Select(b => b.Character?.Id.Entry))}");
+    }
+
+    private static Dictionary<string, object?>? TryHandleQueuedTimelineUnlock(NTimelineScreen timelineScreen)
+    {
+        bool isQueued;
+        try
+        {
+            isQueued = timelineScreen.IsScreenQueued();
+        }
+        catch (System.ObjectDisposedException)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["status"] = "ok",
+                ["message"] = "Timeline changed while checking queued unlocks; retry after the next state poll",
+                ["retry"] = true
+            };
+        }
+
+        if (!isQueued)
+            return null;
+
+        var queuedScreen = TryPeekQueuedTimelineScreen(timelineScreen);
+        var queuedType = queuedScreen?.GetType().Name ?? "unlock";
+        var queuedEpochIds = GetQueuedTimelineEpochIds(queuedScreen);
+        var alreadyRevealed = queuedEpochIds
+            .Where(id => string.Equals(GetProgressEpochState(id), "Revealed", System.StringComparison.OrdinalIgnoreCase))
+            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (alreadyRevealed.Count > 0)
+        {
+            var alreadyRevealedSet = new HashSet<string>(alreadyRevealed, System.StringComparer.OrdinalIgnoreCase);
+            var pendingEpochIds = queuedEpochIds
+                .Where(id => !alreadyRevealedSet.Contains(id))
+                .Distinct(System.StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return new Dictionary<string, object?>
+            {
+                ["status"] = "ok",
+                ["message"] = "Queued timeline unlock references already revealed epochs; not opening it to avoid an invalid unlock path",
+                ["queued_unlock_type"] = queuedType,
+                ["already_revealed_epoch_ids"] = alreadyRevealed,
+                ["pending_epoch_ids"] = pendingEpochIds,
+                ["manual_action_required"] = pendingEpochIds.Count > 0,
+                ["done"] = true
+            };
+        }
+
+        if (string.Equals(queuedType, "NUnlockTimelineScreen", System.StringComparison.Ordinal) &&
+            IsTimelineScreenBusy(timelineScreen))
+        {
+            return new Dictionary<string, object?>
+            {
+                ["status"] = "ok",
+                ["message"] = "Timeline expansion is queued, but the timeline is still animating; retry after the next state poll",
+                ["queued_unlock_type"] = queuedType,
+                ["pending_epoch_ids"] = queuedEpochIds,
+                ["retry"] = true
+            };
+        }
+
+        try
+        {
+            timelineScreen.OpenQueuedScreen();
+            return new Dictionary<string, object?>
+            {
+                ["status"] = "ok",
+                ["message"] = $"Opening queued {queuedType}",
+                ["queued_unlock_type"] = queuedType,
+                ["pending_epoch_ids"] = queuedEpochIds
+            };
+        }
+        catch (System.ObjectDisposedException)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["status"] = "ok",
+                ["message"] = "Timeline changed before the queued unlock could open; retry after the next state poll",
+                ["queued_unlock_type"] = queuedType,
+                ["retry"] = true
+            };
+        }
+        catch (System.Exception ex)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["status"] = "ok",
+                ["message"] = $"Skipped queued {queuedType}: {ex.Message}",
+                ["queued_unlock_type"] = queuedType,
+                ["retry"] = true
+            };
+        }
+    }
+
+    private static object? TryPeekQueuedTimelineScreen(NTimelineScreen timelineScreen)
+    {
+        try
+        {
+            var queue = GetInstanceFieldValue(timelineScreen, "_unlockScreens");
+            if (queue == null)
+                return null;
+
+            var count = queue.GetType().GetProperty("Count")?.GetValue(queue) as int?;
+            if (count <= 0)
+                return null;
+
+            return queue.GetType().GetMethod("Peek")?.Invoke(queue, null);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsTimelineScreenBusy(NTimelineScreen timelineScreen)
+    {
+        try
+        {
+            var isUiVisible = GetInstanceFieldValue(timelineScreen, "_isUiVisible") as bool?;
+            if (isUiVisible == false)
+                return true;
+
+            var inputBlocker = GetInstanceFieldValue(timelineScreen, "_inputBlocker") as Control;
+            if (inputBlocker != null && IsNodeVisible(inputBlocker))
+                return true;
+        }
+        catch (System.ObjectDisposedException)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static List<string> GetQueuedTimelineEpochIds(object? queuedScreen)
+    {
+        var ids = new List<string>();
+        if (queuedScreen == null)
+            return ids;
+
+        AddEpochIdsFromObject(GetInstanceFieldValue(queuedScreen, "_epoch"), ids);
+        AddEpochIdsFromObject(GetInstanceFieldValue(queuedScreen, "_unlockedEpochs"), ids);
+        AddEpochIdsFromObject(GetInstanceFieldValue(queuedScreen, "_erasToUnlock"), ids);
+
+        return ids.Distinct(System.StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static void AddEpochIdsFromObject(object? value, List<string> ids)
+    {
+        if (value == null)
+            return;
+
+        if (value is string id)
+        {
+            ids.Add(id);
+            return;
+        }
+
+        if (value is System.Collections.IEnumerable enumerable && value is not string)
+        {
+            foreach (var item in enumerable)
+                AddEpochIdsFromObject(item, ids);
+            return;
+        }
+
+        var model = value.GetType().GetProperty("Model")?.GetValue(value) ?? value;
+        var modelId = model.GetType().GetProperty("Id")?.GetValue(model)?.ToString();
+        if (!string.IsNullOrEmpty(modelId))
+            ids.Add(modelId);
+    }
+
+    private static string? GetProgressEpochState(string epochId)
+    {
+        try
+        {
+            var progress = MegaCrit.Sts2.Core.Saves.SaveManager.Instance?.Progress;
+            return progress?.Epochs
+                .FirstOrDefault(epoch => string.Equals(epoch.Id, epochId, System.StringComparison.OrdinalIgnoreCase))
+                ?.State
+                .ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static List<string> GetProgressEpochIdsByState(params string[] states)
+    {
+        var stateSet = new HashSet<string>(states, System.StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var progress = MegaCrit.Sts2.Core.Saves.SaveManager.Instance?.Progress;
+            if (progress == null)
+                return new List<string>();
+
+            return progress.Epochs
+                .Where(epoch => stateSet.Contains(epoch.State.ToString()))
+                .Select(epoch => epoch.Id)
+                .ToList();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    private static Dictionary<string, object?> ClickMenuButtonField(
+        object owner,
+        string fieldName,
+        string successMessage,
+        string? disabledMessage = null)
+    {
+        var btn = GetInstanceFieldValue(owner, fieldName);
+        if (btn is NClickableControl clickable)
+        {
+            if (!clickable.Visible || !clickable.IsVisibleInTree())
+                return Error(disabledMessage ?? $"Option '{fieldName}' is not available");
+
+            if (!clickable.IsEnabled)
+                return Error(disabledMessage ?? $"Option '{fieldName}' is not available");
+
+            clickable.ForceClick();
+            return new Dictionary<string, object?> { ["status"] = "ok", ["message"] = successMessage };
+        }
+
+        return Error($"Could not find button '{fieldName}'");
     }
 }

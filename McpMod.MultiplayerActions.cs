@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text.Json;
+using Godot;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
@@ -25,6 +26,10 @@ public static partial class McpMod
         var player = LocalContext.GetMe(runState);
         if (player == null)
             return Error("Could not find local player");
+
+        var tree = Engine.GetMainLoop() as SceneTree;
+        if (tree?.Root != null && IsAnyFtueVisible(tree.Root))
+            return Error("Blocking popup active. Use menu_select with one of the advertised popup options before gameplay actions.");
 
         return action switch
         {

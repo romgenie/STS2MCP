@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Godot;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
@@ -26,6 +27,18 @@ public static partial class McpMod
     private static Dictionary<string, object?> BuildMultiplayerGameState()
     {
         var result = new Dictionary<string, object?>();
+        var tree = Engine.GetMainLoop() as SceneTree;
+
+        // Surface blocking FTUE/tutorial/popup prompts before normal run state, so MP
+        // automation gets the same dismissal contract as singleplayer (see #71). Every
+        // FTUE in `Decompiled/src/Core/Nodes/Ftue/` gates only on per-profile flags, not
+        // on run mode, so they are equally reachable in multiplayer runs.
+        if (tree?.Root != null)
+        {
+            var ftueState = BuildVisibleFtueState(tree.Root);
+            if (ftueState != null)
+                return ftueState;
+        }
 
         if (!RunManager.Instance.IsInProgress)
         {
@@ -68,7 +81,7 @@ public static partial class McpMod
         // Same overlay-first detection logic as singleplayer
         var topOverlay = NOverlayStack.Instance?.Peek();
         var currentRoom = runState.CurrentRoom;
-        bool mapIsOpen = NMapScreen.Instance is { IsOpen: true };
+        bool mapIsOpen = IsMapScreenOpenOrVisible();
 
         if (topOverlay is NCardGridSelectionScreen cardSelectScreen)
         {
@@ -136,7 +149,7 @@ public static partial class McpMod
             else
             {
                 // After combat ends - reward/card overlays are caught by top-level checks above.
-                if (NMapScreen.Instance is { IsOpen: true })
+                if (IsMapScreenOpenOrVisible())
                 {
                     result["state_type"] = "map";
                     result["map"] = BuildMultiplayerMapState(runState);
@@ -150,7 +163,7 @@ public static partial class McpMod
         }
         else if (currentRoom is EventRoom eventRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMultiplayerMapState(runState);
@@ -173,7 +186,7 @@ public static partial class McpMod
         }
         else if (currentRoom is MerchantRoom merchantRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMultiplayerMapState(runState);
@@ -192,7 +205,7 @@ public static partial class McpMod
         }
         else if (currentRoom is RestSiteRoom restSiteRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMultiplayerMapState(runState);
@@ -205,7 +218,7 @@ public static partial class McpMod
         }
         else if (currentRoom is TreasureRoom treasureRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMultiplayerMapState(runState);

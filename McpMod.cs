@@ -15,15 +15,13 @@ using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
-using MegaCrit.Sts2.Core.Runs;
-using MegaCrit.Sts2.Core.Saves;
 
 namespace STS2_MCP;
 
 [ModInitializer("Initialize")]
 public static partial class McpMod
 {
-    public const string Version = "0.3.4";
+    public const string Version = "0.4.0";
     public const int DefaultPort = 15526;
     private const string ConfigFileName = "STS2_MCP.conf";
 
@@ -50,11 +48,17 @@ public static partial class McpMod
             string configPath = Path.Combine(modDir, ConfigFileName);
             if (!File.Exists(configPath))
             {
-                // Create default config so the user knows it's configurable
-                var defaultConfig = new Dictionary<string, object> { ["port"] = DefaultPort };
-                string json = JsonSerializer.Serialize(defaultConfig, _jsonOptions);
-                File.WriteAllText(configPath, json);
-                GD.Print($"[STS2 MCP] Created default config at {configPath}");
+                try
+                {
+                    var defaultConfig = new Dictionary<string, object> { ["port"] = DefaultPort };
+                    string json = JsonSerializer.Serialize(defaultConfig, _jsonOptions);
+                    File.WriteAllText(configPath, json);
+                    GD.Print($"[STS2 MCP] Created default config at {configPath}");
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    GD.Print($"[STS2 MCP] No config found at {configPath}; using default port {DefaultPort}");
+                }
                 return DefaultPort;
             }
 
@@ -114,8 +118,8 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            GD.PrintErr(
-                $"[STS2 MCP] Harmony patches unavailable; continuing without optional UI injection: {ex}");
+            GD.Print(
+                $"[STS2 MCP] Optional Harmony settings UI injection skipped: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -307,59 +311,7 @@ public static partial class McpMod
             else if (path == "/api/v1/settings")
             {
                 if (request.HttpMethod == "GET")
-                {
-                    try
-                    {
-                        var dataTask = RunOnMainThread(() =>
-                        {
-                            var sm = SaveManager.Instance;
-                            var settings = sm.SettingsSave;
-                            var prefs = sm.PrefsSave;
-
-                            return new Dictionary<string, object?>
-                            {
-                                ["display"] = new Dictionary<string, object?>
-                                {
-                                    ["fullscreen"] = settings.Fullscreen,
-                                    ["resolution"] = $"{settings.WindowSize.X}x{settings.WindowSize.Y}",
-                                    ["fps_limit"] = settings.FpsLimit,
-                                    ["vsync"] = settings.VSync.ToString(),
-                                    ["msaa"] = settings.Msaa,
-                                    ["aspect_ratio"] = settings.AspectRatioSetting.ToString(),
-                                    ["target_display"] = settings.TargetDisplay,
-                                    ["limit_fps_background"] = settings.LimitFpsInBackground,
-                                },
-                                ["audio"] = new Dictionary<string, object?>
-                                {
-                                    ["master"] = settings.VolumeMaster,
-                                    ["bgm"] = settings.VolumeBgm,
-                                    ["sfx"] = settings.VolumeSfx,
-                                    ["ambience"] = settings.VolumeAmbience,
-                                },
-                                ["gameplay"] = new Dictionary<string, object?>
-                                {
-                                    ["fast_mode"] = prefs.FastMode.ToString(),
-                                    ["screen_shake"] = prefs.ScreenShakeOptionIndex,
-                                    ["show_run_timer"] = prefs.ShowRunTimer,
-                                    ["show_card_indices"] = prefs.ShowCardIndices,
-                                    ["text_effects"] = prefs.TextEffectsEnabled,
-                                    ["long_press"] = prefs.IsLongPressEnabled,
-                                },
-                                ["mods"] = new Dictionary<string, object?>
-                                {
-                                    ["enabled"] = settings.ModSettings?.PlayerAgreedToModLoading ?? false,
-                                },
-                                ["language"] = settings.Language,
-                                ["skip_intro"] = settings.SkipIntroLogo,
-                            };
-                        });
-                        SendJson(response, dataTask.GetAwaiter().GetResult());
-                    }
-                    catch (System.Exception ex)
-                    {
-                        SendError(response, 500, $"Failed to read settings: {ex.Message}");
-                    }
-                }
+                    HandleGetSettings(response);
                 else
                     SendError(response, 405, "Method not allowed");
             }
@@ -382,18 +334,7 @@ public static partial class McpMod
             else if (path == "/api/v1/bestiary")
             {
                 if (request.HttpMethod == "GET")
-                {
-                    try
-                    {
-                        var dataTask = RunOnMainThread(() => BuildBestiary());
-                        var data = dataTask.GetAwaiter().GetResult();
-                        SendJson(response, data);
-                    }
-                    catch (System.Exception ex)
-                    {
-                        SendError(response, 500, $"Failed to build bestiary: {ex.Message}");
-                    }
-                }
+                    HandleGetBestiary(response);
                 else
                     SendError(response, 405, "Method not allowed");
             }
@@ -514,6 +455,27 @@ public static partial class McpMod
 
         string action = actionElem.GetString() ?? "";
 
+        // Menu actions (FTUE/popup dismissal, game-over, character select, etc.) are
+        // scene-tree-driven and equally valid in MP. Route them to the shared handler
+        // so MP clients can dismiss blocking FTUE prompts without going through the
+        // run-mode-specific dispatcher.
+        if (action == "menu_select")
+        {
+            try
+            {
+                var option = parsed.TryGetValue("option", out var optElem) ? optElem.GetString() ?? "" : "";
+                var seed = parsed.TryGetValue("seed", out var seedElem) ? seedElem.GetString() : null;
+                var resultTask = RunOnMainThread(() => ExecuteMenuSelect(option, seed));
+                var result = resultTask.GetAwaiter().GetResult();
+                SendJson(response, result);
+            }
+            catch (Exception ex)
+            {
+                SendError(response, 500, $"Menu action failed: {ex.Message}");
+            }
+            return;
+        }
+
         try
         {
             var resultTask = RunOnMainThread(() => ExecuteMultiplayerAction(action, parsed));
@@ -566,245 +528,6 @@ public static partial class McpMod
                 });
             }
             catch { /* response may be unusable */ }
-        }
-    }
-
-    private static void HandleGetProfiles(HttpListenerResponse response)
-    {
-        try
-        {
-            var dataTask = RunOnMainThread(() =>
-            {
-                var sm = SaveManager.Instance;
-                var result = new Dictionary<string, object?>
-                {
-                    ["current_profile_id"] = sm.CurrentProfileId,
-                    ["profiles"] = new List<Dictionary<string, object?>>()
-                };
-
-                // Check which profiles exist by looking for save directories
-                var profiles = (List<Dictionary<string, object?>>)result["profiles"]!;
-                for (int i = 1; i <= 3; i++)
-                {
-                    var profileData = new Dictionary<string, object?>
-                    {
-                        ["id"] = i,
-                        ["is_current"] = i == sm.CurrentProfileId,
-                    };
-
-                    // Check if profile has progress data
-                    try
-                    {
-                        var path = MegaCrit.Sts2.Core.Saves.Managers.ProgressSaveManager.GetProgressPathForProfile(i);
-                        profileData["has_data"] = System.IO.File.Exists(path);
-                        profileData["path"] = path;
-                    }
-                    catch
-                    {
-                        profileData["has_data"] = false;
-                    }
-
-                    profiles.Add(profileData);
-                }
-
-                return result;
-            });
-            var data = dataTask.GetAwaiter().GetResult();
-            SendJson(response, data);
-        }
-        catch (System.Exception ex)
-        {
-            SendError(response, 500, $"Failed to get profiles: {ex.Message}");
-        }
-    }
-
-    private static void HandlePostProfiles(HttpListenerRequest request, HttpListenerResponse response)
-    {
-        string body;
-        using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
-            body = reader.ReadToEnd();
-
-        Dictionary<string, JsonElement>? parsed;
-        try
-        {
-            parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(body);
-        }
-        catch
-        {
-            SendError(response, 400, "Invalid JSON");
-            return;
-        }
-
-        if (parsed == null || !parsed.TryGetValue("action", out var actionElem))
-        {
-            SendError(response, 400, "Missing 'action' field. Use: switch, delete");
-            return;
-        }
-
-        string action = actionElem.GetString() ?? "";
-        int profileId = parsed.TryGetValue("profile_id", out var idElem) ? idElem.GetInt32() : 0;
-
-        try
-        {
-            var resultTask = RunOnMainThread(() =>
-            {
-                var sm = SaveManager.Instance;
-
-                if (action == "switch")
-                {
-                    if (profileId < 1 || profileId > 3)
-                        return new Dictionary<string, object?> { ["error"] = "profile_id must be 1-3" };
-                    if (RunManager.Instance.IsInProgress)
-                        return new Dictionary<string, object?> { ["error"] = "Cannot switch profiles during a run" };
-
-                    // Use the proper UI flow: find profile screen and click the button
-                    var tree = (Godot.Engine.GetMainLoop()) as Godot.SceneTree;
-                    if (tree?.Root != null)
-                    {
-                        var profileScreen = FindFirst<MegaCrit.Sts2.Core.Nodes.Screens.ProfileScreen.NProfileScreen>(tree.Root);
-                        if (profileScreen != null)
-                        {
-                            var buttons = profileScreen.GetType().GetField("_profileButtons",
-                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                                ?.GetValue(profileScreen) as System.Collections.IList;
-                            if (buttons != null)
-                            {
-                                foreach (var btn in buttons)
-                                {
-                                    var btnId = btn.GetType().GetField("_profileId",
-                                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                                        ?.GetValue(btn);
-                                    if (btnId is int id && id == profileId)
-                                    {
-                                        var switchMethod = btn.GetType().GetMethod("SwitchToThisProfile",
-                                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                                        switchMethod?.Invoke(btn, null);
-                                        return new Dictionary<string, object?>
-                                        {
-                                            ["status"] = "ok",
-                                            ["message"] = $"Switching to profile {profileId} (via UI)",
-                                            ["current_profile_id"] = profileId
-                                        };
-                                    }
-                                }
-                            }
-                        }
-
-                        // Fallback: open profile screen first if not already open
-                        var mainMenu = FindFirst<MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NMainMenu>(tree.Root);
-                        if (mainMenu != null)
-                        {
-                            mainMenu.OpenProfileScreen();
-                            return new Dictionary<string, object?>
-                            {
-                                ["status"] = "ok",
-                                ["message"] = "Opened profile screen. Send switch again to select profile.",
-                            };
-                        }
-                    }
-
-                    // Last resort: direct switch (requires restart)
-                    sm.SwitchProfileId(profileId);
-                    return new Dictionary<string, object?>
-                    {
-                        ["status"] = "ok",
-                        ["message"] = $"Switched to profile {profileId} (requires restart)",
-                        ["current_profile_id"] = sm.CurrentProfileId
-                    };
-                }
-                else if (action == "delete")
-                {
-                    if (profileId < 1 || profileId > 3)
-                        return new Dictionary<string, object?> { ["error"] = "profile_id must be 1-3" };
-                    if (profileId == sm.CurrentProfileId)
-                        return new Dictionary<string, object?> { ["error"] = "Cannot delete the active profile" };
-
-                    sm.DeleteProfile(profileId);
-                    return new Dictionary<string, object?>
-                    {
-                        ["status"] = "ok",
-                        ["message"] = $"Deleted profile {profileId}"
-                    };
-                }
-
-                return new Dictionary<string, object?> { ["error"] = $"Unknown action: {action}. Use: switch, delete" };
-            });
-            var result = resultTask.GetAwaiter().GetResult();
-            SendJson(response, result);
-        }
-        catch (System.Exception ex)
-        {
-            SendError(response, 500, $"Profile action failed: {ex.Message}");
-        }
-    }
-
-    private static void HandleGetProfile(HttpListenerResponse response)
-    {
-        try
-        {
-            var dataTask = RunOnMainThread(() => BuildProfile());
-            var data = dataTask.GetAwaiter().GetResult();
-            SendJson(response, data);
-        }
-        catch (System.Exception ex)
-        {
-            SendError(response, 500, $"Failed to build profile: {ex.Message}");
-        }
-    }
-
-    private static void HandleGetGlossaryCards(HttpListenerResponse response)
-    {
-        try
-        {
-            var dataTask = RunOnMainThread(() => BuildGlossaryCards());
-            var data = dataTask.GetAwaiter().GetResult();
-            SendJson(response, data);
-        }
-        catch (System.Exception ex)
-        {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
-        }
-    }
-
-    private static void HandleGetGlossaryKeywords(HttpListenerResponse response)
-    {
-        try
-        {
-            var dataTask = RunOnMainThread(() => BuildGlossaryKeywords());
-            var data = dataTask.GetAwaiter().GetResult();
-            SendJson(response, data);
-        }
-        catch (System.Exception ex)
-        {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
-        }
-    }
-
-    private static void HandleGetGlossaryPotions(HttpListenerResponse response)
-    {
-        try
-        {
-            var dataTask = RunOnMainThread(() => BuildGlossaryPotions());
-            var data = dataTask.GetAwaiter().GetResult();
-            SendJson(response, data);
-        }
-        catch (System.Exception ex)
-        {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
-        }
-    }
-
-    private static void HandleGetGlossaryRelics(HttpListenerResponse response)
-    {
-        try
-        {
-            var dataTask = RunOnMainThread(() => BuildGlossaryRelics());
-            var data = dataTask.GetAwaiter().GetResult();
-            SendJson(response, data);
-        }
-        catch (System.Exception ex)
-        {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
         }
     }
 

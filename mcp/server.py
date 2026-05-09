@@ -5,6 +5,7 @@ as MCP tools for Claude Desktop / Claude Code.
 """
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -16,9 +17,10 @@ mcp = FastMCP("sts2")
 
 _base_url: str = "http://localhost:15526"
 _trust_env: bool = True
+_http: httpx.AsyncClient | None = None
 DEFAULT_HOST = os.environ.get("STS2_HOST", "localhost")
 DEFAULT_PORT = int(os.environ.get("STS2_PORT", "15526"))
-_base_url: str = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
+_base_url = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
 
 
 def _sp_url() -> str:
@@ -29,32 +31,99 @@ def _mp_url() -> str:
     return f"{_base_url}/api/v1/multiplayer"
 
 
+def _profile_url() -> str:
+    return f"{_base_url}/api/v1/profile"
+
+
+def _profiles_url() -> str:
+    return f"{_base_url}/api/v1/profiles"
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _http
+    if _http is None:
+        _http = httpx.AsyncClient(timeout=httpx.Timeout(10), trust_env=_trust_env)
+    return _http
+
+
 async def _get(params: dict | None = None) -> str:
-    async with httpx.AsyncClient(timeout=10, trust_env=_trust_env) as client:
-        r = await client.get(_sp_url(), params=params)
-        r.raise_for_status()
-        return r.text
+    r = await _get_client().get(_sp_url(), params=params)
+    r.raise_for_status()
+    return r.text
 
 
 async def _post(body: dict) -> str:
-    async with httpx.AsyncClient(timeout=10, trust_env=_trust_env) as client:
-        r = await client.post(_sp_url(), json=body)
-        r.raise_for_status()
-        return r.text
+    r = await _get_client().post(_sp_url(), json=body)
+    r.raise_for_status()
+    return r.text
 
 
 async def _mp_get(params: dict | None = None) -> str:
-    async with httpx.AsyncClient(timeout=10, trust_env=_trust_env) as client:
-        r = await client.get(_mp_url(), params=params)
-        r.raise_for_status()
-        return r.text
+    r = await _get_client().get(_mp_url(), params=params)
+    r.raise_for_status()
+    return r.text
 
 
 async def _mp_post(body: dict) -> str:
-    async with httpx.AsyncClient(timeout=10, trust_env=_trust_env) as client:
-        r = await client.post(_mp_url(), json=body)
-        r.raise_for_status()
-        return r.text
+    r = await _get_client().post(_mp_url(), json=body)
+    r.raise_for_status()
+    return r.text
+
+
+async def _profile_get() -> str:
+    r = await _get_client().get(_profile_url())
+    r.raise_for_status()
+    return r.text
+
+
+async def _profiles_get() -> str:
+    r = await _get_client().get(_profiles_url())
+    r.raise_for_status()
+    return r.text
+
+
+async def _profiles_post(body: dict) -> str:
+    r = await _get_client().post(_profiles_url(), json=body)
+    r.raise_for_status()
+    return r.text
+
+
+async def _wait_for_profile(profile_id: int, fallback: str) -> str:
+    last_profiles: dict | None = None
+    for _ in range(30):
+        await asyncio.sleep(0.1)
+        profiles_text = await _profiles_get()
+        profiles = json.loads(profiles_text)
+        last_profiles = profiles
+        if profiles.get("current_profile_id") == profile_id:
+            return json.dumps(
+                {
+                    "status": "ok",
+                    "message": f"Switched to profile {profile_id}",
+                    "current_profile_id": profile_id,
+                    "profiles": profiles.get("profiles", []),
+                },
+                indent=2,
+            )
+
+    return json.dumps(
+        {
+            "status": "error",
+            "error": f"Timed out waiting for profile {profile_id} to become active",
+            "current_profile_id": (
+                last_profiles.get("current_profile_id")
+                if isinstance(last_profiles, dict)
+                else None
+            ),
+            "profiles": (
+                last_profiles.get("profiles", [])
+                if isinstance(last_profiles, dict)
+                else []
+            ),
+            "initial_response": fallback,
+        },
+        indent=2,
+    )
 
 
 def _handle_error(e: Exception) -> str:
@@ -83,6 +152,119 @@ async def get_game_state(format: str = "markdown") -> str:
     """
     try:
         return await _get({"format": format})
+    except Exception as e:
+        return _handle_error(e)
+
+
+@mcp.tool()
+async def menu_select(option: str, seed: str | None = None) -> str:
+    """Select a visible menu option.
+
+    Use with state_type "menu" or "game_over". Covers main-menu navigation,
+    singleplayer / multiplayer submenus, multiplayer host & join lobbies,
+    multiplayer load lobby (resume saved co-op run), character select for SP
+    and MP (with `unready` once readied in MP), profile switching, timeline
+    controls, tutorial prompts, blocking popups, and game-over main-menu return.
+
+    Multiplayer flow tips:
+      - On menu_screen "multiplayer_join", use refresh / back / join_<index> /
+        join_<player_id> (e.g. "join_0" or "join_76561198000000000").
+      - On menu_screen "multiplayer_load_lobby", use confirm (or embark) to
+        ready up; the run resumes once everyone is connected and ready.
+      - On menu_screen "character_select" while in MP, the state includes a
+        `lobby` block with the roster, ready states, and ascension; "unready"
+        becomes available after you confirm/embark.
+
+    Args:
+        option: Option ID from the current menu state's options list. If an
+            option is listed under blocked_options, selecting it returns the
+            API's manual-action response instead of forcing UI entry.
+        seed: Optional seed for supported embark flows. Standard mode rejects seeds.
+    """
+    body: dict = {"action": "menu_select", "option": option}
+    if seed is not None:
+        body["seed"] = seed
+    try:
+        return await _post(body)
+    except Exception as e:
+        return _handle_error(e)
+
+
+@mcp.tool()
+async def get_profile() -> str:
+    """Get the current profile's persistent progress summary.
+
+    Includes character stats, discovered content, achievements, epochs, and global
+    run totals for the active profile.
+    """
+    try:
+        return await _profile_get()
+    except Exception as e:
+        return _handle_error(e)
+
+
+@mcp.tool()
+async def list_profiles() -> str:
+    """List the three profile slots and identify the active slot.
+
+    The has_data field indicates whether a slot currently has progress data.
+    """
+    try:
+        return await _profiles_get()
+    except Exception as e:
+        return _handle_error(e)
+
+
+@mcp.tool()
+async def switch_profile(profile_id: int) -> str:
+    """Switch to a profile slot through the game's profile UI.
+
+    Use an empty slot to create or enter a fresh profile for testing. This cannot
+    be used while a run is in progress.
+
+    Args:
+        profile_id: Profile slot to switch to. Must be 1, 2, or 3.
+    """
+    try:
+        body = {"action": "switch", "profile_id": profile_id}
+        result = await _profiles_post(body)
+        try:
+            parsed = json.loads(result)
+            if parsed.get("status") == "error":
+                return result
+
+            message = parsed.get("message", "")
+            if isinstance(message, str) and message.startswith("Opened profile screen"):
+                for _ in range(20):
+                    await asyncio.sleep(0.1)
+                    state_text = await _get({"format": "json"})
+                    state = json.loads(state_text)
+                    if state.get("menu_screen") == "profile_select":
+                        result = await _profiles_post(body)
+                        parsed = json.loads(result)
+                        if parsed.get("status") == "error":
+                            return result
+                        break
+            result = await _wait_for_profile(profile_id, result)
+        except json.JSONDecodeError:
+            pass
+        return result
+    except Exception as e:
+        return _handle_error(e)
+
+
+@mcp.tool()
+async def delete_profile(profile_id: int) -> str:
+    """Delete an inactive profile slot.
+
+    The active profile cannot be deleted through this tool. Switch away first if
+    you intend to remove a slot after backing up any data you need.
+
+    Args:
+        profile_id: Profile slot to delete. Must be 1, 2, or 3.
+    """
+    try:
+        return await _profiles_post({"action": "delete", "profile_id": profile_id})
     except Exception as e:
         return _handle_error(e)
 
@@ -902,6 +1084,9 @@ def main():
     global _base_url, _trust_env
     _base_url = f"http://{args.host}:{args.port}"
     _trust_env = not args.no_trust_env
+
+    # Eagerly initialize the shared httpx client so the first request is fast
+    _get_client()
 
     mcp.run(transport="stdio")
 

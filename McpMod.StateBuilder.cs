@@ -10,7 +10,6 @@ using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.Models;
-using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
 using MegaCrit.Sts2.Core.Entities.Merchant;
@@ -36,15 +35,23 @@ using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Nodes.Screens.Shops;
 using MegaCrit.Sts2.Core.Nodes.Screens.TreasureRoomRelic;
 using MegaCrit.Sts2.Core.Rewards;
+using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Models.RelicPools;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Multiplayer;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Platform;
+using MegaCrit.Sts2.Core.Platform.Steam;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes.Screens.GameOverScreen;
 using MegaCrit.Sts2.Core.Nodes.Screens.Timeline;
-using MegaCrit.Sts2.Core.Nodes.Screens.ProfileScreen;
 using MegaCrit.Sts2.Core.Nodes.Screens.Settings;
+using MegaCrit.Sts2.Core.Nodes.Screens.ProfileScreen;
 using Godot;
 
 namespace STS2_MCP;
@@ -54,44 +61,27 @@ public static partial class McpMod
     private static Dictionary<string, object?> BuildGameState()
     {
         var result = new Dictionary<string, object?>();
+        var tree = (Godot.Engine.GetMainLoop()) as SceneTree;
+
+        if (tree?.Root != null)
+        {
+            var ftueState = BuildVisibleFtueState(tree.Root);
+            if (ftueState != null)
+                return ftueState;
+        }
 
         if (!RunManager.Instance.IsInProgress)
         {
             result["state_type"] = "menu";
 
             // Detect which menu screen is active
-            var tree = (Godot.Engine.GetMainLoop()) as SceneTree;
             if (tree?.Root != null)
             {
-                // Check for tutorial FTUE popup
-                var tutorialFtue = FindFirst<MegaCrit.Sts2.Core.Nodes.Ftue.NAcceptTutorialsFtue>(tree.Root);
-                if (tutorialFtue != null && tutorialFtue.Visible)
-                {
-                    result["menu_screen"] = "tutorial_prompt";
-                    result["message"] = "Enable Tutorials? Choose yes or no.";
-                    result["options"] = new List<Dictionary<string, object?>>
-                    {
-                        new() { ["name"] = "no", ["enabled"] = true },
-                        new() { ["name"] = "yes", ["enabled"] = true }
-                    };
-                }
-
-                // Check for any other FTUE popup
-                if (!result.ContainsKey("menu_screen"))
-                {
-                    var ftue = FindFirst<MegaCrit.Sts2.Core.Nodes.Ftue.NFtue>(tree.Root);
-                    if (ftue != null && ftue.Visible)
-                    {
-                        result["menu_screen"] = "tutorial";
-                        result["message"] = "Tutorial popup active. Use advance to dismiss.";
-                    }
-                }
-
                 if (!result.ContainsKey("menu_screen"))
                 {
                 // Check for singleplayer submenu (Standard / Daily / Custom)
                 var spSubmenu = FindFirst<NSingleplayerSubmenu>(tree.Root);
-                if (spSubmenu != null && spSubmenu.Visible)
+                if (spSubmenu != null && IsNodeVisible(spSubmenu))
                 {
                     result["menu_screen"] = "singleplayer";
                     result["message"] = "Select game mode.";
@@ -102,8 +92,8 @@ public static partial class McpMod
                     {
                         try
                         {
-                            var btn = spSubmenu.GetType().GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(spSubmenu);
-                            if (btn is Control ctrl && ctrl.Visible)
+                            var btn = GetInstanceFieldValue(spSubmenu, fieldName);
+                            if (btn is Control ctrl && IsNodeVisible(ctrl))
                             {
                                 var isEnabled = btn.GetType().GetProperty("IsEnabled")?.GetValue(btn) as bool?;
                                 modeOptions.Add(new Dictionary<string, object?>
@@ -115,13 +105,14 @@ public static partial class McpMod
                         }
                         catch { }
                     }
+                    AddMenuOptionIfVisible(modeOptions, spSubmenu, "_backButton", "back");
                     result["options"] = modeOptions;
                 }
                 // Check for multiplayer host submenu (Standard / Daily / Custom for multiplayer)
                 else
                 {
                     var mpHostSubmenu = FindFirst<NMultiplayerHostSubmenu>(tree.Root);
-                    if (mpHostSubmenu != null && mpHostSubmenu.Visible)
+                    if (mpHostSubmenu != null && IsNodeVisible(mpHostSubmenu))
                     {
                         result["menu_screen"] = "multiplayer_host";
                         result["message"] = "Multiplayer host: select game mode.";
@@ -132,8 +123,8 @@ public static partial class McpMod
                         {
                             try
                             {
-                                var btn = mpHostSubmenu.GetType().GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(mpHostSubmenu);
-                                if (btn is Control ctrl && ctrl.Visible)
+                                var btn = GetInstanceFieldValue(mpHostSubmenu, fieldName);
+                                if (btn is Control ctrl && IsNodeVisible(ctrl))
                                 {
                                     var isEnabled = btn.GetType().GetProperty("IsEnabled")?.GetValue(btn) as bool?;
                                     modeOptions.Add(new Dictionary<string, object?>
@@ -145,13 +136,14 @@ public static partial class McpMod
                             }
                             catch { }
                         }
+                        AddMenuOptionIfVisible(modeOptions, mpHostSubmenu, "_backButton", "back");
                         result["options"] = modeOptions;
                     }
                     else
                     {
                         // Check for multiplayer submenu (Host / Join / Load / Abandon)
                         var mpSubmenu = FindFirst<NMultiplayerSubmenu>(tree.Root);
-                        if (mpSubmenu != null && mpSubmenu.Visible)
+                        if (mpSubmenu != null && IsNodeVisible(mpSubmenu))
                         {
                             result["menu_screen"] = "multiplayer";
                             result["message"] = "Multiplayer menu.";
@@ -162,8 +154,8 @@ public static partial class McpMod
                             {
                                 try
                                 {
-                                    var btn = mpSubmenu.GetType().GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(mpSubmenu);
-                                    if (btn is Control ctrl && ctrl.Visible)
+                                    var btn = GetInstanceFieldValue(mpSubmenu, fieldName);
+                                    if (btn is Control ctrl && IsNodeVisible(ctrl))
                                     {
                                         var isEnabled = btn.GetType().GetProperty("IsEnabled")?.GetValue(btn) as bool?;
                                         mpOptions.Add(new Dictionary<string, object?>
@@ -175,92 +167,40 @@ public static partial class McpMod
                                 }
                                 catch { }
                             }
+                            AddMenuOptionIfVisible(mpOptions, mpSubmenu, "_backButton", "back");
                             result["options"] = mpOptions;
                         }
                     }
                 }
+                // Multiplayer Join Friend screen (lives in the same submenu stack as
+                // NMultiplayerSubmenu; pushed when the user clicks "join")
+                if (result.ContainsKey("menu_screen") == false)
+                {
+                    var joinScreen = FindFirst<NJoinFriendScreen>(tree.Root);
+                    if (joinScreen != null && IsNodeVisible(joinScreen))
+                    {
+                        AddMultiplayerJoinMenuState(result, joinScreen);
+                    }
+                }
+
+                // Multiplayer Load lobby — resume saved MP run. Pushed by NMultiplayerSubmenu
+                // when "load" is clicked (host) or by JoinFlow when joining a save in progress (client).
+                if (result.ContainsKey("menu_screen") == false)
+                {
+                    var loadLobby = FindFirst<NMultiplayerLoadGameScreen>(tree.Root);
+                    if (loadLobby != null && IsNodeVisible(loadLobby))
+                    {
+                        AddMultiplayerLoadLobbyMenuState(result, loadLobby);
+                    }
+                }
+
                 // Check for character select screen
                 if (result.ContainsKey("menu_screen") == false)
                 {
                     var charSelect = FindFirst<NCharacterSelectScreen>(tree.Root);
-                    if (charSelect != null && charSelect.Visible)
+                    if (charSelect != null && IsNodeVisible(charSelect))
                     {
-                        result["menu_screen"] = "character_select";
-                        result["message"] = "Select a character.";
-
-                        var buttons = FindAll<NCharacterSelectButton>(charSelect);
-                        var characters = new List<Dictionary<string, object?>>();
-                        foreach (var btn in buttons)
-                        {
-                            try
-                            {
-                                if (btn.Character is { } cm)
-                                {
-                                    var charData = new Dictionary<string, object?>
-                                    {
-                                        ["name"] = SafeGetText(() => cm.Title),
-                                        ["id"] = cm.Id.Entry,
-                                        ["locked"] = btn.IsLocked,
-                                        ["hp"] = cm.StartingHp,
-                                        ["gold"] = cm.StartingGold,
-                                        ["energy"] = cm.MaxEnergy,
-                                        ["description"] = SafeGetText(() => cm.CardsModifierDescription),
-                                    };
-
-                                    // Starting relics
-                                    var startRelics = new List<Dictionary<string, object?>>();
-                                    foreach (var relic in cm.StartingRelics)
-                                    {
-                                        startRelics.Add(new Dictionary<string, object?>
-                                        {
-                                            ["name"] = SafeGetText(() => relic.Title),
-                                            ["description"] = SafeGetText(() => relic.DynamicDescription)
-                                        });
-                                    }
-                                    if (startRelics.Count > 0)
-                                        charData["starting_relics"] = startRelics;
-
-                                    // Starting deck summary
-                                    var deckCards = new List<string>();
-                                    foreach (var card in cm.StartingDeck)
-                                        deckCards.Add(SafeGetText(() => card.Title) ?? "?");
-                                    if (deckCards.Count > 0)
-                                        charData["starting_deck"] = deckCards;
-
-                                    // Known cards count from card pool
-                                    try
-                                    {
-                                        var allCards = cm.CardPool?.AllCards;
-                                        if (allCards != null)
-                                            charData["total_cards"] = System.Linq.Enumerable.Count(allCards);
-                                    }
-                                    catch { }
-
-                                    // Known relics count from relic pool
-                                    try
-                                    {
-                                        var allRelics = cm.RelicPool?.AllRelics;
-                                        if (allRelics != null)
-                                            charData["total_relics"] = System.Linq.Enumerable.Count(allRelics);
-                                    }
-                                    catch { }
-
-                                    // Known potions count from potion pool
-                                    try
-                                    {
-                                        var allPotions = cm.PotionPool?.AllPotions;
-                                        if (allPotions != null)
-                                            charData["total_potions"] = System.Linq.Enumerable.Count(allPotions);
-                                    }
-                                    catch { }
-
-                                    characters.Add(charData);
-                                }
-                            }
-                            catch { }
-                        }
-                        if (characters.Count > 0)
-                            result["characters"] = characters;
+                        AddCharacterSelectMenuState(result, charSelect);
                     }
                     else
                     {
@@ -269,10 +209,15 @@ public static partial class McpMod
                         var compendiumSubmenu = FindFirst<NCompendiumSubmenu>(tree.Root);
                         var settingsScreen = FindFirst<NSettingsScreen>(tree.Root);
 
-                        if (timelineScreen != null && timelineScreen.Visible)
+                        if (timelineScreen != null && IsNodeVisible(timelineScreen))
                         {
                             result["menu_screen"] = "timeline";
                             result["message"] = "Timeline screen.";
+                            result["options"] = new List<Dictionary<string, object?>>
+                            {
+                                new() { ["name"] = "advance", ["enabled"] = true },
+                                new() { ["name"] = "back", ["enabled"] = true }
+                            };
 
                             // Read epochs from ProgressState (stable, not hover-dependent)
                             try
@@ -281,53 +226,106 @@ public static partial class McpMod
                                 if (progress != null)
                                 {
                                     var epochList = new List<Dictionary<string, object?>>();
+                                    var revealedCount = 0;
+                                    var obtainedCount = 0;
+                                    var lockedCount = 0;
+                                    var noSlotCount = 0;
                                     foreach (var epoch in progress.Epochs)
                                     {
                                         var eraName = epoch.Id;
+                                        var state = epoch.State.ToString();
                                         // Clean up ID to readable name
                                         var name = System.Text.RegularExpressions.Regex.Replace(eraName, @"(\d+)$", "");
                                         name = System.Text.RegularExpressions.Regex.Replace(name, @"(?<=[a-z])(?=[A-Z])", " ");
+
+                                        switch (epoch.State)
+                                        {
+                                            case EpochState.Revealed:
+                                                revealedCount++;
+                                                break;
+                                            case EpochState.Obtained:
+                                            case EpochState.ObtainedNoSlot:
+                                                obtainedCount++;
+                                                break;
+                                            case EpochState.NotObtained:
+                                                lockedCount++;
+                                                break;
+                                            case EpochState.NoSlot:
+                                                noSlotCount++;
+                                                break;
+                                        }
 
                                         epochList.Add(new Dictionary<string, object?>
                                         {
                                             ["id"] = eraName,
                                             ["name"] = name,
-                                            ["state"] = epoch.State.ToString(),
+                                            ["state"] = state,
                                             ["obtained"] = epoch.ObtainDate
                                         });
                                     }
 
-                                    // Count total slots from UI for hidden count
-                                    var allSlots = FindAll<NEpochSlot>(timelineScreen);
-                                    var completedCount = allSlots.Count(s => s.State.ToString() == "Complete" || s.State.ToString() == "Obtained");
-                                    var lockedVisible = allSlots.Count(s => s.State.ToString() == "NotObtained");
-
                                     result["epochs"] = epochList;
-                                    result["total_slots"] = allSlots.Count;
-                                    result["completed_count"] = completedCount;
-                                    result["locked_count"] = lockedVisible;
+                                    result["total_slots"] = epochList.Count;
+                                    result["completed_count"] = revealedCount;
+                                    result["revealed_count"] = revealedCount;
+                                    result["obtained_unrevealed_count"] = obtainedCount;
+                                    result["locked_count"] = lockedCount;
+                                    result["no_slot_count"] = noSlotCount;
                                 }
                             }
                             catch { }
                         }
-                        else if (compendiumSubmenu != null && compendiumSubmenu.Visible)
+                        else if (compendiumSubmenu != null && IsNodeVisible(compendiumSubmenu))
                         {
                             result["menu_screen"] = "compendium";
                             result["message"] = "Compendium screen.";
                         }
-                        else if (settingsScreen != null && settingsScreen.Visible)
+                        else if (settingsScreen != null && IsNodeVisible(settingsScreen))
                         {
                             result["menu_screen"] = "settings";
                             result["message"] = "Settings screen.";
                         }
                         else
                         {
-                            var profileScreen = FindFirst<MegaCrit.Sts2.Core.Nodes.Screens.ProfileScreen.NProfileScreen>(tree.Root);
-                            if (profileScreen != null && profileScreen.Visible)
+                            var profileScreen = FindFirst<NProfileScreen>(tree.Root);
+                            if (profileScreen != null && IsNodeVisible(profileScreen))
                             {
                                 result["menu_screen"] = "profile_select";
                                 result["message"] = "Profile select screen.";
                                 result["current_profile_id"] = SaveManager.Instance?.CurrentProfileId;
+
+                                var options = new List<Dictionary<string, object?>>();
+                                var buttons = GetInstanceFieldValue(profileScreen, "_profileButtons") as System.Collections.IEnumerable;
+                                if (buttons != null)
+                                {
+                                    foreach (var btn in buttons)
+                                    {
+                                        var btnId = GetInstanceFieldValue(btn, "_profileId");
+                                        if (btnId is int id)
+                                        {
+                                            var enabled = btn.GetType().GetProperty("IsEnabled")?.GetValue(btn) as bool?;
+                                            options.Add(new Dictionary<string, object?>
+                                            {
+                                                ["name"] = $"profile_{id}",
+                                                ["enabled"] = enabled ?? true
+                                            });
+                                        }
+                                    }
+                                }
+
+                                var backBtn = GetInstanceFieldValue(profileScreen, "_backButton")
+                                    ?? FindFirst<NBackButton>(profileScreen);
+                                if (backBtn is NClickableControl backClickable && IsNodeVisible(backClickable))
+                                {
+                                    options.Add(new Dictionary<string, object?>
+                                    {
+                                        ["name"] = "back",
+                                        ["enabled"] = backClickable.IsEnabled
+                                    });
+                                }
+
+                                if (options.Count > 0)
+                                    result["options"] = options;
                             }
                         }
                         if (!result.ContainsKey("menu_screen"))
@@ -339,20 +337,41 @@ public static partial class McpMod
                         if (mainMenu != null)
                         {
                             var options = new List<string>();
-                            var fields = new[] { "_continueButton", "_singleplayerButton", "_multiplayerButton", "_compendiumButton", "_timelineButton", "_settingsButton", "_quitButton" };
-                            var labels = new[] { "continue", "singleplayer", "multiplayer", "compendium", "timeline", "settings", "quit" };
+                            var blockedOptions = new List<Dictionary<string, object?>>();
+                            var fields = new[] { "_continueButton", "_abandonRunButton", "_singleplayerButton", "_multiplayerButton", "_compendiumButton", "_timelineButton", "_settingsButton", "_quitButton" };
+                            var labels = new[] { "continue", "abandon_run", "singleplayer", "multiplayer", "compendium", "timeline", "settings", "quit" };
+                            var unrevealedEpochs = GetProgressEpochIdsByState("Obtained", "ObtainedNoSlot");
                             for (int i = 0; i < fields.Length; i++)
                             {
                                 try
                                 {
-                                    var btn = mainMenu.GetType().GetField(fields[i], System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(mainMenu) as Control;
-                                    if (btn != null && btn.Visible)
+                                    var btn = GetInstanceFieldValue(mainMenu, fields[i]);
+                                    if (btn is NClickableControl clickable &&
+                                        clickable.IsEnabled &&
+                                        clickable.Visible &&
+                                        clickable.IsVisibleInTree())
+                                    {
+                                        if (labels[i] == "timeline" && unrevealedEpochs.Count > 0)
+                                        {
+                                            blockedOptions.Add(new Dictionary<string, object?>
+                                            {
+                                                ["name"] = "timeline",
+                                                ["enabled"] = false,
+                                                ["reason"] = "manual_epoch_reveal_required",
+                                                ["pending_epoch_ids"] = unrevealedEpochs
+                                            });
+                                            continue;
+                                        }
+
                                         options.Add(labels[i]);
+                                    }
                                 }
                                 catch { }
                             }
                             if (options.Count > 0)
                                 result["options"] = options;
+                            if (blockedOptions.Count > 0)
+                                result["blocked_options"] = blockedOptions;
                         }
                         }
                     }
@@ -370,6 +389,16 @@ public static partial class McpMod
         var runState = RunManager.Instance.DebugOnlyGetState();
         if (runState == null)
         {
+            if (tree?.Root != null)
+            {
+                var activeCharSelect = FindFirst<NCharacterSelectScreen>(tree.Root);
+                if (activeCharSelect != null && IsNodeVisible(activeCharSelect))
+                {
+                    AddCharacterSelectMenuState(result, activeCharSelect);
+                    return result;
+                }
+            }
+
             result["state_type"] = "unknown";
             return result;
         }
@@ -379,7 +408,7 @@ public static partial class McpMod
         // overlay stack while the map opens after the player clicks proceed.
         var topOverlay = NOverlayStack.Instance?.Peek();
         var currentRoom = runState.CurrentRoom;
-        bool mapIsOpen = NMapScreen.Instance is { IsOpen: true };
+        bool mapIsOpen = IsMapScreenOpenOrVisible();
         if (topOverlay is NCardGridSelectionScreen cardSelectScreen)
         {
             result["state_type"] = "card_select";
@@ -421,7 +450,7 @@ public static partial class McpMod
             result["game_over"] = new Dictionary<string, object?>
             {
                 ["message"] = "Run ended.",
-                ["options"] = new List<string> { "continue", "main_menu" }
+                ["options"] = new List<string> { "main_menu" }
             };
         }
         else if (topOverlay is IOverlayScreen
@@ -435,6 +464,11 @@ public static partial class McpMod
                 ["screen_type"] = topOverlay.GetType().Name,
                 ["message"] = $"An overlay ({topOverlay.GetType().Name}) is active. It may require manual interaction in-game."
             };
+        }
+        else if (mapIsOpen)
+        {
+            result["state_type"] = "map";
+            result["map"] = BuildMapState(runState);
         }
         else if (currentRoom is CombatRoom combatRoom)
         {
@@ -458,7 +492,7 @@ public static partial class McpMod
             {
                 // After combat ends - reward/card overlays are caught by top-level checks above.
                 // Only handle map and the brief transition before rewards appear.
-                if (NMapScreen.Instance is { IsOpen: true })
+                if (IsMapScreenOpenOrVisible())
                 {
                     result["state_type"] = "map";
                     result["map"] = BuildMapState(runState);
@@ -472,7 +506,7 @@ public static partial class McpMod
         }
         else if (currentRoom is EventRoom eventRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMapState(runState);
@@ -495,7 +529,7 @@ public static partial class McpMod
         }
         else if (currentRoom is MerchantRoom merchantRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMapState(runState);
@@ -516,7 +550,7 @@ public static partial class McpMod
         }
         else if (currentRoom is RestSiteRoom restSiteRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMapState(runState);
@@ -529,7 +563,7 @@ public static partial class McpMod
         }
         else if (currentRoom is TreasureRoom treasureRoom)
         {
-            if (NMapScreen.Instance is { IsOpen: true })
+            if (IsMapScreenOpenOrVisible())
             {
                 result["state_type"] = "map";
                 result["map"] = BuildMapState(runState);
@@ -538,6 +572,19 @@ public static partial class McpMod
             {
                 result["state_type"] = "treasure";
                 result["treasure"] = BuildTreasureState(treasureRoom, runState);
+            }
+        }
+        else if (currentRoom == null && tree?.Root != null)
+        {
+            var activeCharSelect = FindFirst<NCharacterSelectScreen>(tree.Root);
+            if (activeCharSelect != null && IsNodeVisible(activeCharSelect))
+            {
+                AddCharacterSelectMenuState(result, activeCharSelect);
+            }
+            else
+            {
+                result["state_type"] = "unknown";
+                result["room_type"] = currentRoom?.GetType().Name;
             }
         }
         else
@@ -554,34 +601,455 @@ public static partial class McpMod
             ["ascension"] = runState.AscensionLevel
         };
 
-        // Always include full player data so external tools have it on every screen
+        // Always include full player data (relics, potions, deck, etc.) on every screen
         var _player = LocalContext.GetMe(runState);
         if (_player != null)
         {
-            try
-            {
-                result["player"] = BuildPlayerState(_player);
-            }
-            catch (System.Exception e)
-            {
-                result["player_error"] = e.Message;
-            }
-        }
-
-        // Always include map data so external tools can display it regardless of current screen
-        if (result["state_type"] as string != "map")
-        {
-            try
-            {
-                result["map"] = BuildMapState(runState);
-            }
-            catch (System.Exception e)
-            {
-                result["map_error"] = e.Message;
-            }
+            result["player"] = BuildPlayerState(_player);
         }
 
         return result;
+    }
+
+    private static void AddCharacterSelectMenuState(
+        Dictionary<string, object?> result,
+        NCharacterSelectScreen charSelect)
+    {
+        result["state_type"] = "menu";
+        result["menu_screen"] = "character_select";
+        result["message"] = "Select a character.";
+
+        var buttons = FindAll<NCharacterSelectButton>(charSelect);
+        var characters = new List<Dictionary<string, object?>>();
+        var options = new List<Dictionary<string, object?>>();
+        foreach (var btn in buttons)
+        {
+            try
+            {
+                if (btn.Character is { } cm && IsNodeVisible(btn))
+                {
+                    var characterId = cm.Id.Entry;
+                    var characterName = SafeGetText(() => cm.Title);
+                    options.Add(new Dictionary<string, object?>
+                    {
+                        ["name"] = characterId,
+                        ["enabled"] = !btn.IsLocked
+                    });
+
+                    var charData = new Dictionary<string, object?>
+                    {
+                        ["name"] = characterName,
+                        ["id"] = characterId,
+                        ["locked"] = btn.IsLocked,
+                        ["hp"] = cm.StartingHp,
+                        ["gold"] = cm.StartingGold,
+                        ["energy"] = cm.MaxEnergy,
+                        ["description"] = SafeGetText(() => cm.CardsModifierDescription),
+                    };
+
+                    var startRelics = new List<Dictionary<string, object?>>();
+                    foreach (var relic in cm.StartingRelics)
+                    {
+                        startRelics.Add(new Dictionary<string, object?>
+                        {
+                            ["name"] = SafeGetText(() => relic.Title),
+                            ["description"] = SafeGetText(() => relic.DynamicDescription)
+                        });
+                    }
+                    if (startRelics.Count > 0)
+                        charData["starting_relics"] = startRelics;
+
+                    var deckCards = new List<string>();
+                    foreach (var card in cm.StartingDeck)
+                        deckCards.Add(SafeGetText(() => card.Title) ?? "?");
+                    if (deckCards.Count > 0)
+                        charData["starting_deck"] = deckCards;
+
+                    try
+                    {
+                        var allCards = cm.CardPool?.AllCards;
+                        if (allCards != null)
+                            charData["total_cards"] = System.Linq.Enumerable.Count(allCards);
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var allRelics = cm.RelicPool?.AllRelics;
+                        if (allRelics != null)
+                            charData["total_relics"] = System.Linq.Enumerable.Count(allRelics);
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var allPotions = cm.PotionPool?.AllPotions;
+                        if (allPotions != null)
+                            charData["total_potions"] = System.Linq.Enumerable.Count(allPotions);
+                    }
+                    catch { }
+
+                    characters.Add(charData);
+                }
+            }
+            catch { }
+        }
+        if (characters.Count > 0)
+            result["characters"] = characters;
+
+        var embarkBtn = GetInstanceFieldValue(charSelect, "_embarkButton");
+        if (embarkBtn is NClickableControl embarkClickable && IsNodeVisible(embarkClickable))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "confirm",
+                ["enabled"] = embarkClickable.IsEnabled
+            });
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "embark",
+                ["enabled"] = embarkClickable.IsEnabled
+            });
+        }
+
+        // _backButton and _unreadyButton are surfaced as distinct options so MP callers
+        // can distinguish "leave the lobby" from "retract my ready vote". In SP, only
+        // _backButton ever becomes enabled. See NCharacterSelectScreen.OnEmbarkPressed /
+        // OnUnreadyPressed for the toggle logic.
+        var backBtn = GetInstanceFieldValue(charSelect, "_backButton");
+        if (backBtn is NClickableControl backClickable && IsNodeVisible(backClickable))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "back",
+                ["enabled"] = backClickable.IsEnabled
+            });
+        }
+
+        // MP lobby block — surfaces roster / ready state / ascension when this character
+        // select is part of a host or client lobby. SP runs leave the field absent.
+        bool isMpCharSelect = false;
+        try
+        {
+            var lobby = charSelect.Lobby;
+            if (lobby != null && lobby.NetService != null && lobby.NetService.Type.IsMultiplayer())
+            {
+                isMpCharSelect = true;
+                result["lobby"] = BuildStartRunLobbyState(lobby);
+            }
+        }
+        catch { }
+
+        // _unreadyButton is part of the scene in SP too but never becomes enabled there.
+        // Only surface it as an option in MP, where it has a real role.
+        if (isMpCharSelect)
+        {
+            var unreadyBtn = GetInstanceFieldValue(charSelect, "_unreadyButton");
+            if (unreadyBtn is NClickableControl unreadyClickable && IsNodeVisible(unreadyClickable))
+            {
+                options.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = "unready",
+                    ["enabled"] = unreadyClickable.IsEnabled
+                });
+            }
+        }
+
+        if (options.Count > 0)
+            result["options"] = options;
+    }
+
+    private static Dictionary<string, object?> BuildStartRunLobbyState(StartRunLobby lobby)
+    {
+        var lobbyState = new Dictionary<string, object?>
+        {
+            ["type"] = lobby.NetService.Type switch
+            {
+                NetGameType.Host => "host",
+                NetGameType.Client => "client",
+                NetGameType.Singleplayer => "singleplayer",
+                _ => lobby.NetService.Type.ToString().ToLowerInvariant()
+            },
+            ["game_mode"] = lobby.GameMode.ToString().ToLowerInvariant(),
+            ["max_players"] = lobby.MaxPlayers,
+            ["ascension"] = lobby.Ascension,
+            ["max_ascension"] = lobby.MaxAscension,
+            ["all_ready"] = lobby.Players.Count > 0 && lobby.Players.All(p => p.isReady),
+            ["is_about_to_begin"] = SafeIsAboutToBeginGame(lobby)
+        };
+
+        // is_local_ready === local player has hit Embark in MP and is now waiting.
+        // Mirrors NCharacterSelectScreen._readyAndWaitingContainer.Visible.
+        try
+        {
+            var local = lobby.LocalPlayer;
+            lobbyState["is_local_ready"] = local.isReady;
+            lobbyState["local_player_id"] = local.id.ToString();
+        }
+        catch { }
+
+        var players = new List<Dictionary<string, object?>>();
+        ulong localId;
+        try { localId = lobby.LocalPlayer.id; } catch { localId = 0; }
+        ulong hostId = lobby.NetService.Type == NetGameType.Host ? localId : 0;
+
+        foreach (var p in lobby.Players)
+        {
+            var entry = new Dictionary<string, object?>
+            {
+                ["id"] = p.id.ToString(),
+                ["slot_id"] = p.slotId,
+                ["is_local"] = p.id == localId,
+                // We can only positively identify the host as "us" when we ARE the host;
+                // a client doesn't know which remote id is the host without inspecting
+                // the net service. Keep it simple and only flag is_host=true for self
+                // when hosting — clients can infer host-ness by player_id when needed.
+                ["is_host"] = p.id == hostId && hostId != 0,
+                ["character"] = SafeGetText(() => p.character?.Title)
+                                ?? p.character?.Id.Entry,
+                ["character_id"] = p.character?.Id.Entry,
+                ["is_ready"] = p.isReady,
+                ["platform_name"] = SafeGetPlayerName(lobby.NetService.Platform, p.id)
+            };
+            players.Add(entry);
+        }
+        lobbyState["players"] = players;
+        lobbyState["player_count"] = players.Count;
+
+        if (!string.IsNullOrEmpty(lobby.Seed))
+            lobbyState["seed"] = lobby.Seed;
+
+        return lobbyState;
+    }
+
+    private static bool SafeIsAboutToBeginGame(StartRunLobby lobby)
+    {
+        try { return lobby.IsAboutToBeginGame(); }
+        catch { return false; }
+    }
+
+    private static string? SafeGetPlayerName(PlatformType platform, ulong playerId)
+    {
+        try { return PlatformUtil.GetPlayerName(platform, playerId); }
+        catch { return null; }
+    }
+
+    private static void AddMultiplayerJoinMenuState(
+        Dictionary<string, object?> result,
+        NJoinFriendScreen joinScreen)
+    {
+        result["state_type"] = "menu";
+        result["menu_screen"] = "multiplayer_join";
+
+        // FastMP: when Steam isn't initialized OR --fastmp is set, OnSubmenuOpened auto-
+        // joins localhost:33771 instead of presenting friends. This is a debug/local-dev
+        // path. We surface it so callers don't try to hit "refresh" expecting a list.
+        bool fastMp = !SteamInitializer.Initialized || CommandLineHelper.HasArg("fastmp");
+        result["fast_mp"] = fastMp;
+
+        var loadingFriends = GetInstanceFieldValue(joinScreen, "_loadingFriendsIndicator") as Control;
+        var loadingOverlay = GetInstanceFieldValue(joinScreen, "_loadingOverlay") as Control;
+        bool loading = (loadingFriends != null && loadingFriends.Visible)
+                       || (loadingOverlay != null && loadingOverlay.Visible);
+        result["loading"] = loading;
+
+        var noFriendsLabel = GetInstanceFieldValue(joinScreen, "_noFriendsLabel") as Control;
+        bool noFriends = noFriendsLabel != null && noFriendsLabel.Visible;
+        result["no_friends"] = noFriends;
+
+        var friends = new List<Dictionary<string, object?>>();
+        var options = new List<Dictionary<string, object?>>();
+
+        var buttonContainer = GetInstanceFieldValue(joinScreen, "_buttonContainer") as Control;
+        if (buttonContainer != null)
+        {
+            int index = 0;
+            foreach (var child in buttonContainer.GetChildren())
+            {
+                if (child is NJoinFriendButton friendBtn)
+                {
+                    string? name = null;
+                    try { name = PlatformUtil.GetPlayerName(PlatformUtil.PrimaryPlatform, friendBtn.PlayerId); }
+                    catch { }
+
+                    friends.Add(new Dictionary<string, object?>
+                    {
+                        ["index"] = index,
+                        ["name"] = name,
+                        ["player_id"] = friendBtn.PlayerId.ToString(),
+                        ["enabled"] = friendBtn.IsEnabled
+                    });
+                    options.Add(new Dictionary<string, object?>
+                    {
+                        ["name"] = $"join_{index}",
+                        ["enabled"] = friendBtn.IsEnabled
+                    });
+                    index++;
+                }
+            }
+        }
+        result["friends"] = friends;
+
+        var refreshBtn = GetInstanceFieldValue(joinScreen, "_refreshButton") as NClickableControl;
+        if (refreshBtn != null && IsNodeVisible(refreshBtn))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "refresh",
+                ["enabled"] = refreshBtn.IsEnabled && !loading
+            });
+        }
+        AddMenuOptionIfVisible(options, joinScreen, "_backButton", "back");
+
+        if (fastMp)
+        {
+            result["message"] = loading
+                ? "FastMP join flow is connecting to localhost:33771..."
+                : "FastMP mode (no Steam): join screen auto-connects to localhost:33771.";
+        }
+        else if (loading)
+        {
+            result["message"] = "Refreshing friend list...";
+        }
+        else if (noFriends)
+        {
+            result["message"] = "No friends with open lobbies. Use 'refresh' to retry, or 'back' to return.";
+        }
+        else
+        {
+            result["message"] = "Pick a friend to join, or 'refresh' to update the list.";
+        }
+
+        result["options"] = options;
+    }
+
+    private static void AddMultiplayerLoadLobbyMenuState(
+        Dictionary<string, object?> result,
+        NMultiplayerLoadGameScreen loadLobby)
+    {
+        result["state_type"] = "menu";
+        result["menu_screen"] = "multiplayer_load_lobby";
+
+        var lobby = GetInstanceFieldValue(loadLobby, "_runLobby") as LoadRunLobby;
+        if (lobby != null)
+        {
+            var info = new Dictionary<string, object?>
+            {
+                ["type"] = lobby.NetService.Type switch
+                {
+                    NetGameType.Host => "host",
+                    NetGameType.Client => "client",
+                    _ => lobby.NetService.Type.ToString().ToLowerInvariant()
+                },
+                ["game_mode"] = lobby.GameMode.ToString().ToLowerInvariant(),
+                ["ascension"] = lobby.Run?.Ascension ?? 0,
+                ["act"] = (lobby.Run?.CurrentActIndex ?? 0) + 1,
+                ["floor"] = lobby.Run?.VisitedMapCoords?.Count ?? 0
+            };
+
+            try
+            {
+                var localPlayer = lobby.Run?.Players?.FirstOrDefault(p => p.NetId == lobby.NetService.NetId);
+                if (localPlayer != null)
+                {
+                    info["character_id"] = localPlayer.CharacterId?.Entry;
+                    info["current_hp"] = localPlayer.CurrentHp;
+                    info["max_hp"] = localPlayer.MaxHp;
+                    info["gold"] = localPlayer.Gold;
+                }
+            }
+            catch { }
+
+            info["expected_player_count"] = lobby.Run?.Players?.Count ?? 0;
+            info["connected_player_count"] = lobby.ConnectedPlayerIds?.Count ?? 0;
+
+            // IsAboutToBeginGame == "no players still in handshake AND every connected player is ready".
+            // It's the literal trigger for the host's TryBeginRun, so it doubles as both "all_ready" (matches
+            // the StartRunLobby semantic of 'every joined player is ready') and "is_about_to_begin".
+            // Without these fields, FormatLobbyMarkdown printed "All ready: false" unconditionally for load lobbies.
+            bool aboutToBegin = false;
+            try
+            {
+                var aboutToBeginMethod = lobby.GetType().GetMethod(
+                    "IsAboutToBeginGame",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.Public |
+                    System.Reflection.BindingFlags.NonPublic);
+                if (aboutToBeginMethod?.Invoke(lobby, null) is bool value)
+                    aboutToBegin = value;
+            }
+            catch { }
+            info["all_ready"] = aboutToBegin;
+            info["is_about_to_begin"] = aboutToBegin;
+
+            // Per-player ready/connected breakdown
+            var players = new List<Dictionary<string, object?>>();
+            try
+            {
+                if (lobby.Run?.Players != null)
+                {
+                    foreach (var sp in lobby.Run.Players)
+                    {
+                        bool isConnected = lobby.ConnectedPlayerIds?.Contains(sp.NetId) ?? false;
+                        bool isReady = false;
+                        try { isReady = lobby.IsPlayerReady(sp.NetId); } catch { }
+                        players.Add(new Dictionary<string, object?>
+                        {
+                            ["id"] = sp.NetId.ToString(),
+                            ["is_local"] = sp.NetId == lobby.NetService.NetId,
+                            ["character_id"] = sp.CharacterId?.Entry,
+                            ["is_connected"] = isConnected,
+                            ["is_ready"] = isReady,
+                            ["platform_name"] = SafeGetPlayerName(lobby.NetService.Platform, sp.NetId)
+                        });
+                    }
+                }
+            }
+            catch { }
+            info["players"] = players;
+
+            result["lobby"] = info;
+        }
+
+        var options = new List<Dictionary<string, object?>>();
+
+        var confirmBtn = GetInstanceFieldValue(loadLobby, "_confirmButton") as NClickableControl;
+        if (confirmBtn != null && IsNodeVisible(confirmBtn))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "confirm",
+                ["enabled"] = confirmBtn.IsEnabled
+            });
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "embark",
+                ["enabled"] = confirmBtn.IsEnabled
+            });
+        }
+
+        var backBtn2 = GetInstanceFieldValue(loadLobby, "_backButton") as NClickableControl;
+        if (backBtn2 != null && IsNodeVisible(backBtn2))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "back",
+                ["enabled"] = backBtn2.IsEnabled
+            });
+        }
+
+        var unreadyBtn2 = GetInstanceFieldValue(loadLobby, "_unreadyButton") as NClickableControl;
+        if (unreadyBtn2 != null && IsNodeVisible(unreadyBtn2))
+        {
+            options.Add(new Dictionary<string, object?>
+            {
+                ["name"] = "unready",
+                ["enabled"] = unreadyBtn2.IsEnabled
+            });
+        }
+
+        result["options"] = options;
+        result["message"] = "Multiplayer load lobby. Confirm to ready up; once everyone is connected and ready, the run resumes.";
     }
 
     private static Dictionary<string, object?> BuildBattleState(RunState runState, CombatRoom combatRoom)
@@ -744,29 +1212,7 @@ public static partial class McpMod
             slotIndex++;
         }
         state["potions"] = potions;
-
-        // Master deck (full card collection, always available)
-        var deck = new List<Dictionary<string, object?>>();
-        foreach (var card in player.Deck.Cards)
-        {
-            string costDisplay;
-            if (card.EnergyCost.CostsX)
-                costDisplay = "X";
-            else
-                costDisplay = card.EnergyCost.GetAmountToSpend().ToString();
-
-            deck.Add(new Dictionary<string, object?>
-            {
-                ["id"] = card.Id.Entry,
-                ["name"] = SafeGetText(() => card.Title),
-                ["type"] = card.Type.ToString(),
-                ["cost"] = costDisplay,
-                ["description"] = SafeGetCardDescription(card),
-                ["rarity"] = card.Rarity.ToString(),
-                ["is_upgraded"] = card.IsUpgraded
-            });
-        }
-        state["deck"] = deck;
+        state["max_potion_slots"] = player.MaxPotionCount;
 
         return state;
     }
@@ -1188,58 +1634,6 @@ public static partial class McpMod
     {
         var state = new Dictionary<string, object?>();
 
-        // Player summary
-        var player = LocalContext.GetMe(runState);
-        if (player != null)
-        {
-            int totalSlots = player.PotionSlots.Count;
-            int openSlots = player.PotionSlots.Count(s => s == null);
-
-            var relics = new List<Dictionary<string, object?>>();
-            foreach (var relic in player.Relics)
-            {
-                relics.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = relic.Id.Entry,
-                    ["name"] = SafeGetText(() => relic.Title),
-                    ["description"] = SafeGetText(() => relic.DynamicDescription),
-                    ["counter"] = relic.ShowCounter ? relic.DisplayAmount : null,
-                    ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
-                });
-            }
-
-            var potions = new List<Dictionary<string, object?>>();
-            int slotIndex = 0;
-            foreach (var potion in player.PotionSlots)
-            {
-                if (potion != null)
-                {
-                    potions.Add(new Dictionary<string, object?>
-                    {
-                        ["id"] = potion.Id.Entry,
-                        ["name"] = SafeGetText(() => potion.Title),
-                        ["description"] = SafeGetText(() => potion.DynamicDescription),
-                        ["slot"] = slotIndex,
-                        ["can_use_in_combat"] = potion.Usage == PotionUsage.CombatOnly || potion.Usage == PotionUsage.AnyTime,
-                        ["target_type"] = potion.TargetType.ToString(),
-                        ["keywords"] = BuildHoverTips(potion.HoverTips)
-                    });
-                }
-                slotIndex++;
-            }
-
-            state["player"] = new Dictionary<string, object?>
-            {
-                ["character"] = SafeGetText(() => player.Character.Title),
-                ["hp"] = player.Creature.CurrentHp,
-                ["max_hp"] = player.Creature.MaxHp,
-                ["gold"] = player.Gold,
-                ["potion_slots"] = totalSlots,
-                ["open_potion_slots"] = openSlots,
-                ["relics"] = relics,
-                ["potions"] = potions
-            };
-        }
         var map = runState.Map;
         var visitedCoords = runState.VisitedMapCoords;
 
@@ -1915,517 +2309,6 @@ public static partial class McpMod
             catch { /* skip this power - game engine state may be inconsistent */ }
         }
         return powers;
-    }
-
-    internal static object BuildGlossaryCards()
-    {
-        if (!RunManager.Instance.IsInProgress)
-            return new Dictionary<string, object?> { ["error"] = "No run in progress." };
-
-        var runState = RunManager.Instance.DebugOnlyGetState();
-        if (runState == null)
-            return new Dictionary<string, object?> { ["error"] = "Could not read run state." };
-
-        var result = new List<Dictionary<string, object?>>();
-        var seen = new HashSet<string>();
-
-        foreach (var player in runState.Players)
-        {
-            var pool = player.Character?.CardPool;
-            if (pool == null) continue;
-            var poolName = SafeGetText(() => pool.Title) ?? "Unknown";
-
-            foreach (var card in pool.AllCards)
-            {
-                var id = card.Id.Entry;
-                if (seen.Contains(id)) continue;
-                seen.Add(id);
-
-                string costDisplay;
-                if (card.EnergyCost.CostsX)
-                    costDisplay = "X";
-                else
-                    costDisplay = card.EnergyCost.GetAmountToSpend().ToString();
-
-                result.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = id,
-                    ["name"] = SafeGetText(() => card.Title),
-                    ["type"] = card.Type.ToString(),
-                    ["cost"] = costDisplay,
-                    ["description"] = SafeGetCardDescription(card),
-                    ["rarity"] = card.Rarity.ToString(),
-                    ["pool"] = poolName,
-                    ["keywords"] = BuildHoverTips(card.HoverTips)
-                });
-            }
-        }
-
-        return result;
-    }
-
-    internal static object BuildGlossaryRelics()
-    {
-        if (!RunManager.Instance.IsInProgress)
-            return new Dictionary<string, object?> { ["error"] = "No run in progress." };
-
-        var runState = RunManager.Instance.DebugOnlyGetState();
-        if (runState == null)
-            return new Dictionary<string, object?> { ["error"] = "Could not read run state." };
-
-        var result = new List<Dictionary<string, object?>>();
-        var seen = new HashSet<string>();
-
-        // Get relics from player's character pool
-        foreach (var player in runState.Players)
-        {
-            var pool = player.Character?.RelicPool;
-            if (pool == null) continue;
-            var poolName = SafeGetText(() => player.Character.Title) ?? "Unknown";
-
-            foreach (var relic in pool.AllRelics)
-            {
-                var id = relic.Id.Entry;
-                if (seen.Contains(id)) continue;
-                seen.Add(id);
-
-                result.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = id,
-                    ["name"] = SafeGetText(() => relic.Title),
-                    ["description"] = SafeGetText(() => relic.DynamicDescription),
-                    ["rarity"] = relic.Rarity.ToString(),
-                    ["pool"] = poolName,
-                    ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
-                });
-            }
-        }
-
-        // Get shared relics from the grab bag (all relics available in this run)
-        var grabBag = runState.SharedRelicGrabBag;
-        if (grabBag != null && grabBag.IsPopulated)
-        {
-            // The grab bag doesn't expose a list, but we can get relics from the player's owned list
-            // Fall back to enumerating all RelicModel subtypes with CanonicalInstance
-        }
-
-        // Enumerate all concrete RelicModel subtypes for a complete list
-        foreach (var type in typeof(RelicModel).Assembly.GetTypes())
-        {
-            if (type.IsAbstract || !type.IsSubclassOf(typeof(RelicModel))) continue;
-            try
-            {
-                var instance = (RelicModel)System.Activator.CreateInstance(type)!;
-                if (instance.CanonicalInstance is not { } canonical) continue;
-                var id = canonical.Id.Entry;
-                if (seen.Contains(id)) continue;
-                seen.Add(id);
-
-                result.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = id,
-                    ["name"] = SafeGetText(() => canonical.Title),
-                    ["description"] = SafeGetText(() => canonical.DynamicDescription),
-                    ["rarity"] = canonical.Rarity.ToString(),
-                    ["pool"] = canonical.Pool?.Id.Category ?? "Shared",
-                    ["keywords"] = BuildHoverTips(canonical.HoverTipsExcludingRelic)
-                });
-            }
-            catch { }
-        }
-
-        return result;
-    }
-
-    internal static object BuildGlossaryPotions()
-    {
-        if (!RunManager.Instance.IsInProgress)
-            return new Dictionary<string, object?> { ["error"] = "No run in progress." };
-
-        var runState = RunManager.Instance.DebugOnlyGetState();
-        if (runState == null)
-            return new Dictionary<string, object?> { ["error"] = "Could not read run state." };
-
-        var result = new List<Dictionary<string, object?>>();
-        var seen = new HashSet<string>();
-
-        foreach (var player in runState.Players)
-        {
-            var pool = player.Character?.PotionPool;
-            if (pool == null) continue;
-            var poolName = SafeGetText(() => player.Character.Title) ?? "Unknown";
-
-            foreach (var potion in pool.AllPotions)
-            {
-                var id = potion.Id.Entry;
-                if (seen.Contains(id)) continue;
-                seen.Add(id);
-
-                result.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = id,
-                    ["name"] = SafeGetText(() => potion.Title),
-                    ["description"] = SafeGetText(() => potion.DynamicDescription),
-                    ["rarity"] = potion.Rarity.ToString(),
-                    ["target_type"] = potion.TargetType.ToString(),
-                    ["usage"] = potion.Usage.ToString(),
-                    ["pool"] = poolName,
-                    ["keywords"] = BuildHoverTips(potion.ExtraHoverTips)
-                });
-            }
-        }
-
-        return result;
-    }
-
-    internal static object BuildGlossaryKeywords()
-    {
-        if (!RunManager.Instance.IsInProgress)
-            return new Dictionary<string, object?> { ["error"] = "No run in progress." };
-
-        var runState = RunManager.Instance.DebugOnlyGetState();
-        if (runState == null)
-            return new Dictionary<string, object?> { ["error"] = "Could not read run state." };
-
-        var keywords = new Dictionary<string, string>();
-
-        foreach (var player in runState.Players)
-        {
-            // From cards
-            var cardPool = player.Character?.CardPool;
-            if (cardPool != null)
-            {
-                foreach (var card in cardPool.AllCards)
-                    foreach (var tip in card.HoverTips)
-                        if (tip is HoverTip ht)
-                        {
-                            var title = SafeGetText(() => ht.Title);
-                            if (!string.IsNullOrEmpty(title))
-                                keywords[title!] = SafeGetText(() => ht.Description) ?? "";
-                        }
-            }
-
-            // From relics
-            var relicPool = player.Character?.RelicPool;
-            if (relicPool != null)
-            {
-                foreach (var relic in relicPool.AllRelics)
-                    foreach (var tip in relic.HoverTips)
-                        if (tip is HoverTip ht)
-                        {
-                            var title = SafeGetText(() => ht.Title);
-                            if (!string.IsNullOrEmpty(title))
-                                keywords[title!] = SafeGetText(() => ht.Description) ?? "";
-                        }
-            }
-
-            // From potions
-            var potionPool = player.Character?.PotionPool;
-            if (potionPool != null)
-            {
-                foreach (var potion in potionPool.AllPotions)
-                    foreach (var tip in potion.HoverTips)
-                        if (tip is HoverTip ht)
-                        {
-                            var title = SafeGetText(() => ht.Title);
-                            if (!string.IsNullOrEmpty(title))
-                                keywords[title!] = SafeGetText(() => ht.Description) ?? "";
-                        }
-            }
-        }
-
-        var result = new List<Dictionary<string, object?>>();
-        foreach (var kv in keywords.OrderBy(k => k.Key))
-        {
-            result.Add(new Dictionary<string, object?>
-            {
-                ["name"] = kv.Key,
-                ["description"] = kv.Value
-            });
-        }
-
-        return result;
-    }
-
-    internal static object BuildProfile()
-    {
-        var progress = SaveManager.Instance?.Progress;
-        if (progress == null)
-            return new Dictionary<string, object?> { ["error"] = "No profile data available." };
-
-        var result = new Dictionary<string, object?>();
-
-        // Character stats
-        var characters = new List<Dictionary<string, object?>>();
-        foreach (var kv in progress.CharacterStats)
-        {
-            var stats = kv.Value;
-            characters.Add(new Dictionary<string, object?>
-            {
-                ["id"] = kv.Key.Entry,
-                ["max_ascension"] = stats.MaxAscension,
-                ["preferred_ascension"] = stats.PreferredAscension,
-                ["total_wins"] = stats.TotalWins,
-                ["total_losses"] = stats.TotalLosses,
-                ["fastest_win_time"] = stats.FastestWinTime,
-                ["best_win_streak"] = stats.BestWinStreak,
-                ["current_win_streak"] = stats.CurrentWinStreak,
-                ["playtime"] = stats.Playtime
-            });
-        }
-        result["characters"] = characters;
-
-        // Card stats (pick/skip/win/loss rates)
-        var cards = new List<Dictionary<string, object?>>();
-        foreach (var kv in progress.CardStats)
-        {
-            var stats = kv.Value;
-            cards.Add(new Dictionary<string, object?>
-            {
-                ["id"] = kv.Key.Entry,
-                ["times_picked"] = stats.TimesPicked,
-                ["times_skipped"] = stats.TimesSkipped,
-                ["times_won"] = stats.TimesWon,
-                ["times_lost"] = stats.TimesLost
-            });
-        }
-        result["card_stats"] = cards;
-
-        // Encounter stats (with per-character breakdown)
-        var encounters = new List<Dictionary<string, object?>>();
-        foreach (var kv in progress.EncounterStats)
-        {
-            var enc = new Dictionary<string, object?>
-            {
-                ["id"] = kv.Key.Entry,
-                ["total_wins"] = kv.Value.TotalWins,
-                ["total_losses"] = kv.Value.TotalLosses
-            };
-            var fightStats = new List<Dictionary<string, object?>>();
-            foreach (var fs in kv.Value.FightStats)
-            {
-                fightStats.Add(new Dictionary<string, object?>
-                {
-                    ["character"] = fs.Character.Entry,
-                    ["wins"] = fs.Wins,
-                    ["losses"] = fs.Losses
-                });
-            }
-            if (fightStats.Count > 0)
-                enc["by_character"] = fightStats;
-            encounters.Add(enc);
-        }
-        result["encounter_stats"] = encounters;
-
-        // Enemy stats (with per-character breakdown)
-        var enemies = new List<Dictionary<string, object?>>();
-        foreach (var kv in progress.EnemyStats)
-        {
-            var enemy = new Dictionary<string, object?>
-            {
-                ["id"] = kv.Key.Entry,
-                ["total_wins"] = kv.Value.TotalWins,
-                ["total_losses"] = kv.Value.TotalLosses
-            };
-            var fightStats = new List<Dictionary<string, object?>>();
-            foreach (var fs in kv.Value.FightStats)
-            {
-                fightStats.Add(new Dictionary<string, object?>
-                {
-                    ["character"] = fs.Character.Entry,
-                    ["wins"] = fs.Wins,
-                    ["losses"] = fs.Losses
-                });
-            }
-            if (fightStats.Count > 0)
-                enemy["by_character"] = fightStats;
-            enemies.Add(enemy);
-        }
-        result["enemy_stats"] = enemies;
-
-        // Ancient stats
-        var ancients = new List<Dictionary<string, object?>>();
-        foreach (var kv in progress.AncientStats)
-        {
-            var anc = new Dictionary<string, object?>
-            {
-                ["id"] = kv.Key.Entry,
-                ["total_visits"] = kv.Value.TotalVisits,
-                ["total_wins"] = kv.Value.TotalWins,
-                ["total_losses"] = kv.Value.TotalLosses
-            };
-            var charStats = new List<Dictionary<string, object?>>();
-            foreach (var cs in kv.Value.CharStats)
-            {
-                charStats.Add(new Dictionary<string, object?>
-                {
-                    ["character"] = cs.Character.Entry,
-                    ["wins"] = cs.Wins,
-                    ["losses"] = cs.Losses
-                });
-            }
-            if (charStats.Count > 0)
-                anc["by_character"] = charStats;
-            ancients.Add(anc);
-        }
-        result["ancient_stats"] = ancients;
-
-        // Discovered items
-        result["discovered_cards"] = progress.DiscoveredCards.Select(id => id.Entry).ToList();
-        result["discovered_relics"] = progress.DiscoveredRelics.Select(id => id.Entry).ToList();
-        result["discovered_potions"] = progress.DiscoveredPotions.Select(id => id.Entry).ToList();
-        result["discovered_events"] = progress.DiscoveredEvents.Select(id => id.Entry).ToList();
-        result["discovered_acts"] = progress.DiscoveredActs.Select(id => id.Entry).ToList();
-
-        // Achievements
-        var achievements = new List<Dictionary<string, object?>>();
-        foreach (var kv in progress.UnlockedAchievements)
-        {
-            achievements.Add(new Dictionary<string, object?>
-            {
-                ["id"] = kv.Key,
-                ["unlocked_at"] = kv.Value
-            });
-        }
-        result["achievements"] = achievements;
-
-        // Epochs (progression milestones)
-        result["epochs"] = progress.Epochs.Select(e => new Dictionary<string, object?>
-        {
-            ["id"] = e.Id,
-            ["state"] = e.State.ToString(),
-            ["obtained"] = e.ObtainDate
-        }).ToList();
-
-        // Global stats
-        result["total_playtime"] = progress.TotalPlaytime;
-        result["total_unlocks"] = progress.TotalUnlocks;
-        result["current_score"] = progress.CurrentScore;
-        result["floors_climbed"] = progress.FloorsClimbed;
-        result["architect_damage"] = progress.ArchitectDamage;
-        result["total_wins"] = progress.Wins;
-        result["total_losses"] = progress.Losses;
-        result["fastest_victory"] = progress.FastestVictory;
-        result["best_win_streak"] = progress.BestWinStreak;
-        result["number_of_runs"] = progress.NumberOfRuns;
-
-        return result;
-    }
-
-    internal static object BuildBestiary()
-    {
-        var result = new Dictionary<string, object?>();
-        var bindFlags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
-
-        // All monsters — use reflection to read properties without full instantiation
-        var monsters = new List<Dictionary<string, object?>>();
-        foreach (var type in typeof(MonsterModel).Assembly.GetTypes())
-        {
-            if (type.IsAbstract || !type.IsSubclassOf(typeof(MonsterModel)) || type.FullName!.Contains("+")) continue;
-
-            var entry = new Dictionary<string, object?>
-            {
-                ["id"] = ModelId.SlugifyCategory(type.Name),
-                ["class"] = type.Name,
-            };
-
-            // Try to get HP from overridden properties
-            try
-            {
-                var instance = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);
-                var minHp = type.GetProperty("MinInitialHp")?.GetValue(instance);
-                var maxHp = type.GetProperty("MaxInitialHp")?.GetValue(instance);
-                if (minHp != null) entry["min_hp"] = minHp;
-                if (maxHp != null) entry["max_hp"] = maxHp;
-            }
-            catch { }
-
-            // Get move names from method signatures
-            var moves = new List<string>();
-            foreach (var m in type.GetMethods(bindFlags))
-            {
-                if (m.Name.EndsWith("Move") && m.DeclaringType == type
-                    && m.Name != "PerformMove" && m.Name != "RollMove"
-                    && m.Name != "SetMoveImmediate")
-                    moves.Add(m.Name.Replace("Move", ""));
-            }
-            if (moves.Count > 0)
-                entry["moves"] = moves;
-
-            monsters.Add(entry);
-        }
-        result["monsters"] = monsters;
-
-        // All encounters — use reflection
-        var encounters = new List<Dictionary<string, object?>>();
-        foreach (var type in typeof(EncounterModel).Assembly.GetTypes())
-        {
-            if (type.IsAbstract || !type.IsSubclassOf(typeof(EncounterModel)) || type.FullName!.Contains("+")) continue;
-
-            var entry = new Dictionary<string, object?>
-            {
-                ["id"] = ModelId.SlugifyCategory(type.Name),
-                ["class"] = type.Name,
-            };
-
-            try
-            {
-                var instance = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);
-                var roomType = type.GetProperty("RoomType")?.GetValue(instance);
-                var isWeak = type.GetProperty("IsWeak")?.GetValue(instance);
-                var minGold = type.GetProperty("MinGoldReward")?.GetValue(instance);
-                var maxGold = type.GetProperty("MaxGoldReward")?.GetValue(instance);
-                if (roomType != null) entry["room_type"] = roomType.ToString();
-                if (isWeak != null) entry["is_weak"] = isWeak;
-                if (minGold != null) entry["min_gold"] = minGold;
-                if (maxGold != null) entry["max_gold"] = maxGold;
-            }
-            catch { }
-
-            // Get possible monsters from AllPossibleMonsters property override
-            try
-            {
-                var allMonstersMethod = type.GetProperty("AllPossibleMonsters");
-                if (allMonstersMethod != null)
-                {
-                    // Read the method body to find monster type references
-                    var monsterTypes = new List<string>();
-                    foreach (var m in type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-                    {
-                        if (m.Name == "GenerateMonsters" && m.DeclaringType == type)
-                        {
-                            // Check constructor parameters or fields for monster references
-                            break;
-                        }
-                    }
-                    // Fall back: check fields that reference MonsterModel types
-                    foreach (var f in type.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-                    {
-                        if (f.FieldType.IsSubclassOf(typeof(MonsterModel)) || (f.FieldType.IsGenericType && f.FieldType.GetGenericArguments().Any(a => a.IsSubclassOf(typeof(MonsterModel)))))
-                            monsterTypes.Add(f.FieldType.Name);
-                    }
-                    // Also check which monster types the encounter name suggests
-                }
-            }
-            catch { }
-
-            // Infer monsters from encounter name pattern (e.g., NibbitsWeak -> Nibbit)
-            var baseName = type.Name.Replace("Normal", "").Replace("Weak", "").Replace("Elite", "").Replace("Boss", "");
-            var matchingMonsters = new List<string>();
-            foreach (var monsterEntry in monsters)
-            {
-                var mClass = monsterEntry["class"] as string ?? "";
-                if (baseName.Contains(mClass) || mClass.Contains(baseName.TrimEnd('s')))
-                    matchingMonsters.Add(mClass);
-            }
-            if (matchingMonsters.Count > 0)
-                entry["likely_monsters"] = matchingMonsters;
-
-            encounters.Add(entry);
-        }
-        result["encounters"] = encounters;
-
-        return result;
     }
 
     private static List<Dictionary<string, object?>> BuildPetsState(Player player)
