@@ -68,6 +68,12 @@ A successful response looks like:
 
 If you get "Connection refused", the mod is not loaded — check that mods are enabled in the game's settings.
 
+To audit the documented and live HTTP endpoint surface:
+
+```bash
+python3 scripts/audit_endpoints.py
+```
+
 ### 2. Give Your AI Instructions to Interact with the Game
 
 **Clone or download the repository**, then:
