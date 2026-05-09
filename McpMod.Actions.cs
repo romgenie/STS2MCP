@@ -1005,7 +1005,7 @@ public static partial class McpMod
 
         if (button == null)
             return Error($"Unknown Crystal Sphere tool: {tool}");
-        if (!button.Visible || !button.IsEnabled)
+        if (!button.Visible || !button.IsVisibleInTree() || !button.IsEnabled)
             return Error($"Crystal Sphere tool '{tool}' is not available");
 
         button.ForceClick();
@@ -1034,7 +1034,7 @@ public static partial class McpMod
             .FirstOrDefault(c => c.Entity.X == x && c.Entity.Y == y);
         if (cell == null)
             return Error($"Crystal Sphere cell ({x}, {y}) was not found");
-        if (!cell.Entity.IsHidden || !cell.Visible)
+        if (!cell.Entity.IsHidden || !cell.Visible || !cell.IsVisibleInTree())
             return Error($"Crystal Sphere cell ({x}, {y}) is not clickable");
 
         cell.EmitSignal(NClickableControl.SignalName.Released, cell);
@@ -1052,7 +1052,7 @@ public static partial class McpMod
             return Error("Crystal Sphere screen is not open");
 
         var proceedButton = screen.GetNodeOrNull<NProceedButton>("%ProceedButton");
-        if (proceedButton is not { IsEnabled: true })
+        if (proceedButton is not { IsEnabled: true, Visible: true } || !proceedButton.IsVisibleInTree())
             return Error("Crystal Sphere proceed button is not enabled");
 
         proceedButton.ForceClick();

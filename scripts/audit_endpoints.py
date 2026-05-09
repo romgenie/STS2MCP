@@ -523,6 +523,27 @@ def audit_state_surface(repo: Path) -> None:
         if required_fragment not in treasure_action_body:
             fail(f"treasure action missing visibility/enabled guard: {required_fragment}")
 
+    crystal_state_match = re.search(
+        r"private static Dictionary<string, object\?> BuildCrystalSphereState\(.*?\n    private static Dictionary<string, object\?> BuildTreasureState\(",
+        state_builder,
+        re.S,
+    )
+    if not crystal_state_match:
+        fail("could not locate BuildCrystalSphereState for crystal-sphere audit")
+    crystal_state_body = crystal_state_match.group(0)
+    crystal_action_match = re.search(
+        r"private static Dictionary<string, object\?> ExecuteCrystalSphereSetTool\(.*?\n    private static Creature\? ResolveTarget\(",
+        actions,
+        re.S,
+    )
+    if not crystal_action_match:
+        fail("could not locate Crystal Sphere actions for crystal-sphere audit")
+    crystal_action_body = crystal_action_match.group(0)
+    if "IsVisibleInTree" not in crystal_state_body:
+        fail("crystal_sphere state missing visible-in-tree guards")
+    if "IsVisibleInTree" not in crystal_action_body:
+        fail("crystal_sphere actions missing visible-in-tree guards")
+
     print(f"states: {len(state_types)} documented, markdown coverage enforced")
 
 

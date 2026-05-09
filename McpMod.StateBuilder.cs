@@ -2357,12 +2357,13 @@ public static partial class McpMod
         var clickableCells = new List<Dictionary<string, object?>>();
         foreach (var cell in cells.OrderBy(c => c.Entity.Y).ThenBy(c => c.Entity.X))
         {
+            var cellVisible = cell.Visible && cell.IsVisibleInTree();
             var cellState = new Dictionary<string, object?>
             {
                 ["x"] = cell.Entity.X,
                 ["y"] = cell.Entity.Y,
                 ["is_hidden"] = cell.Entity.IsHidden,
-                ["is_clickable"] = cell.Entity.IsHidden && cell.Visible,
+                ["is_clickable"] = cell.Entity.IsHidden && cellVisible,
                 ["is_highlighted"] = cell.Entity.IsHighlighted,
                 ["is_hovered"] = cell.Entity.IsHovered
             };
@@ -2374,7 +2375,7 @@ public static partial class McpMod
             }
 
             cellStates.Add(cellState);
-            if (cell.Entity.IsHidden && cell.Visible)
+            if (cell.Entity.IsHidden && cellVisible)
             {
                 clickableCells.Add(new Dictionary<string, object?>
                 {
@@ -2406,8 +2407,8 @@ public static partial class McpMod
 
         var bigButton = screen.GetNodeOrNull<NClickableControl>("%BigDivinationButton");
         var smallButton = screen.GetNodeOrNull<NClickableControl>("%SmallDivinationButton");
-        bool bigUsable = bigButton?.Visible == true && bigButton.IsEnabled;
-        bool smallUsable = smallButton?.Visible == true && smallButton.IsEnabled;
+        bool bigUsable = bigButton?.Visible == true && bigButton.IsVisibleInTree() && bigButton.IsEnabled;
+        bool smallUsable = smallButton?.Visible == true && smallButton.IsVisibleInTree() && smallButton.IsEnabled;
         bool bigActive = bigButton?.GetNodeOrNull<Godot.Control>("%Outline")?.Visible == true;
         bool smallActive = smallButton?.GetNodeOrNull<Godot.Control>("%Outline")?.Visible == true;
 
@@ -2424,7 +2425,7 @@ public static partial class McpMod
         }
 
         var proceedButton = screen.GetNodeOrNull<NProceedButton>("%ProceedButton");
-        state["can_proceed"] = proceedButton?.IsEnabled == true;
+        state["can_proceed"] = proceedButton?.IsEnabled == true && proceedButton.Visible && proceedButton.IsVisibleInTree();
 
         return state;
     }
