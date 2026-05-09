@@ -1445,6 +1445,7 @@ public static partial class McpMod
         {
             ["status"] = "error",
             ["error"] = "Timeline has obtained epochs that still need to be revealed manually; not opening Timeline because this game state logs invalid unlock-state errors when entered through automation",
+            ["error_code"] = "timeline_manual_action_required",
             ["pending_epoch_ids"] = unrevealedEpochs,
             ["manual_action_required"] = true
         };

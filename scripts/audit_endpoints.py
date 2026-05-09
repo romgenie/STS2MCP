@@ -326,7 +326,7 @@ def audit_static_error_shapes(repo: Path) -> None:
             fail(f"POST validation missing structured error code: {required_fragment}")
     actions = (repo / "McpMod.Actions.cs").read_text(encoding="utf-8")
     multiplayer_actions = (repo / "McpMod.MultiplayerActions.cs").read_text(encoding="utf-8")
-    for required_fragment in ["SendActionResultJson", "unknown_action", "run_not_in_progress", "local_player_unavailable", "blocking_popup_active"]:
+    for required_fragment in ["SendActionResultJson", "unknown_action", "run_not_in_progress", "local_player_unavailable", "blocking_popup_active", "timeline_manual_action_required"]:
         if required_fragment not in mcp_mod + actions:
             fail(f"singleplayer actions missing structured dispatch error handling: {required_fragment}")
     for required_fragment in ["CallerFilePath", "action_error", "McpMod.Actions.cs", "McpMod.MultiplayerActions.cs"]:
@@ -356,8 +356,12 @@ def audit_static_error_shapes(repo: Path) -> None:
     )
     if "blocking_popup_active" not in docs:
         fail("docs must describe blocking popup action errors")
+    if "timeline_manual_action_required" not in docs:
+        fail("docs must describe timeline manual-action errors")
     if "action_error" not in docs:
         fail("docs must describe generic action error fallback code")
+    if re.search(r'\["status"\]\s*=\s*"error"(?![^}]*\["error_code"\])', actions, re.S):
+        fail("manual action error dictionaries must include error_code")
     if '"error_code": "action_error"' not in (repo / "docs" / "raw-full.md").read_text(encoding="utf-8"):
         fail("docs/raw-full.md action error example must include action_error")
     for required_fragment in ["method_not_allowed", "not_found", "internal_error"]:

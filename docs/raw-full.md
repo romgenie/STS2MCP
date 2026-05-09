@@ -1250,7 +1250,7 @@ Select an option from the main menu, a menu submenu, profile select, character s
 | `seed` | string | No | Only supported in menu contexts that expose a real seeded flow. Standard singleplayer character select currently returns an error without starting a run when `seed` is supplied. |
 
 `game_over` advertises only `main_menu`. `continue` is not actionable on that screen and returns an error.
-If `timeline` is blocked by pending obtained epochs, `menu_select` returns an error with `manual_action_required: true` and `pending_epoch_ids` instead of opening Timeline.
+If `timeline` is blocked by pending obtained epochs, `menu_select` returns HTTP 409 with `error_code: "timeline_manual_action_required"`, `manual_action_required: true`, and `pending_epoch_ids` instead of opening Timeline.
 
 ---
 
