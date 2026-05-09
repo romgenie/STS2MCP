@@ -128,6 +128,19 @@ def audit_action_surface(repo: Path) -> None:
     print(f"actions: {len(sp_actions)} singleplayer, {len(mp_actions)} multiplayer actions covered")
 
 
+def audit_static_formatters(repo: Path) -> None:
+    formatting = (repo / "McpMod.Formatting.cs").read_text(encoding="utf-8")
+    forbidden_patterns = {
+        r'card\["name"\].*card\["cost"\]': "card markdown should use FormatCardDetails so upgrades/keywords stay visible",
+        r'relic\["name"\].*relic\["description"\]': "relic markdown should use FormatRelicDetails so rarity/keywords stay visible",
+        r"List<string>\s+\w+List": "keyword markdown should read keyword objects, not legacy string lists",
+    }
+    for pattern, message in forbidden_patterns.items():
+        if re.search(pattern, formatting):
+            fail(message)
+    print("formatters: card/relic metadata helpers enforced")
+
+
 def audit_live(base_url: str) -> None:
     root_status, root = load_json_url(base_url.rstrip("/") + "/")
     if root_status != 200 or not isinstance(root, dict):
@@ -198,6 +211,7 @@ def main() -> None:
     repo = Path(__file__).resolve().parents[1]
     audit_docs(repo)
     audit_action_surface(repo)
+    audit_static_formatters(repo)
     if not args.skip_live:
         audit_live(args.base_url)
 

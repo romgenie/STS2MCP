@@ -361,7 +361,7 @@ public static partial class McpMod
             FormatListSection(sb, "Relics", player, "relics", r =>
             {
                 string counter = r.TryGetValue("counter", out var c) && c != null ? $" [{c}]" : "";
-                return $"- **{r["name"]}**{counter}: {r["description"]}";
+                return $"- {FormatRelicDetails(r, counter)}";
             });
             FormatPotionsSection(sb, player);
 
@@ -371,10 +371,7 @@ public static partial class McpMod
                 foreach (var card in hand)
                 {
                     string playable = card["can_play"] is true ? "✓" : "✗";
-                    string keywords = FormatKeywordNames(card);
-                    string upgraded = FormatUpgradeMarker(card);
-                    string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                    sb.AppendLine($"- [{card["index"]}] **{card["name"]}**{upgraded} ({card["cost"]} energy{starCost}) [{card["type"]}] {playable}{keywords} - {card["description"]} (target: {card["target_type"]})");
+                    sb.AppendLine($"- [{card["index"]}] {FormatCardDetails(card, includeTarget: true)} {playable}");
                 }
                 sb.AppendLine();
             }
@@ -470,13 +467,7 @@ public static partial class McpMod
         if (player.TryGetValue(pileKey, out var pileObj) && pileObj is List<Dictionary<string, object?>> pile && pile.Count > 0)
         {
             foreach (var card in pile)
-            {
-                string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                string rarity = card.TryGetValue("rarity", out var r) && r != null ? $" [{r}]" : "";
-                string keywords = FormatKeywordNames(card);
-                string upgraded = FormatUpgradeMarker(card);
-                sb.AppendLine($"- {card["name"]}{upgraded} ({card["cost"]}{starCost}){rarity}{keywords}: {card["description"]}");
-            }
+                sb.AppendLine($"- {FormatCardDetails(card, energyLabel: false)}");
         }
         else
             sb.AppendLine("- *(empty)*");
@@ -485,6 +476,30 @@ public static partial class McpMod
 
     private static string FormatUpgradeMarker(Dictionary<string, object?> card)
         => card.TryGetValue("is_upgraded", out var upgraded) && upgraded is true ? "+" : "";
+
+    private static string FormatCardDetails(Dictionary<string, object?> card, bool includeTarget = false, bool energyLabel = true)
+    {
+        string upgraded = FormatUpgradeMarker(card);
+        string cost = card.TryGetValue("cost", out var c) && c != null ? c.ToString()! : "?";
+        string energy = energyLabel ? " energy" : "";
+        string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
+        string type = card.TryGetValue("type", out var t) && t != null ? $" [{t}]" : "";
+        string rarity = card.TryGetValue("rarity", out var r) && r != null ? $" {r}" : "";
+        string keywords = FormatKeywordNames(card);
+        string description = card.TryGetValue("description", out var d) && d != null ? $" - {d}" : "";
+        string target = includeTarget && card.TryGetValue("target_type", out var targetObj) && targetObj != null
+            ? $" (target: {targetObj})"
+            : "";
+        return $"**{card.GetValueOrDefault("name")}**{upgraded} ({cost}{energy}{starCost}){type}{rarity}{keywords}{description}{target}";
+    }
+
+    private static string FormatRelicDetails(Dictionary<string, object?> relic, string nameSuffix = "")
+    {
+        string rarity = relic.TryGetValue("rarity", out var r) && r != null ? $" {r}" : "";
+        string keywords = FormatKeywordNames(relic);
+        string description = relic.TryGetValue("description", out var d) && d != null ? $" - {d}" : "";
+        return $"**{relic.GetValueOrDefault("name")}**{nameSuffix}{rarity}{keywords}{description}";
+    }
 
     private static string FormatKeywordNames(Dictionary<string, object?> item)
     {
@@ -767,12 +782,7 @@ public static partial class McpMod
         if (cardReward.TryGetValue("cards", out var cardsObj) && cardsObj is List<Dictionary<string, object?>> cards)
         {
             foreach (var card in cards)
-            {
-                string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                string keywords = FormatKeywordNames(card);
-                string upgraded = FormatUpgradeMarker(card);
-                sb.AppendLine($"- [{card["index"]}] **{card["name"]}**{upgraded} ({card["cost"]} energy{starCost}) [{card["type"]}] {card["rarity"]}{keywords} - {card["description"]}");
-            }
+                sb.AppendLine($"- [{card["index"]}] {FormatCardDetails(card)}");
             sb.AppendLine();
         }
 
@@ -791,7 +801,7 @@ public static partial class McpMod
         if (relicSelect.TryGetValue("relics", out var relicsObj) && relicsObj is List<Dictionary<string, object?>> relics)
         {
             foreach (var relic in relics)
-                sb.AppendLine($"- [{relic["index"]}] **{relic["name"]}** - {relic["description"]}");
+                sb.AppendLine($"- [{relic["index"]}] {FormatRelicDetails(relic)}");
             sb.AppendLine();
         }
 
@@ -817,10 +827,7 @@ public static partial class McpMod
         {
             sb.AppendLine("### Selectable Cards");
             foreach (var card in cards)
-            {
-                string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                sb.AppendLine($"- [{card["index"]}] **{card["name"]}** ({card["cost"]} energy{starCost}) [{card["type"]}] - {card["description"]}");
-            }
+                sb.AppendLine($"- [{card["index"]}] {FormatCardDetails(card)}");
             sb.AppendLine();
         }
 
@@ -828,7 +835,7 @@ public static partial class McpMod
         {
             sb.AppendLine("### Already Selected");
             foreach (var card in selected)
-                sb.AppendLine($"- {card["name"]}");
+                sb.AppendLine($"- {FormatCardDetails(card)}");
             sb.AppendLine();
         }
 
@@ -860,10 +867,7 @@ public static partial class McpMod
         {
             sb.AppendLine("### Cards");
             foreach (var card in cards)
-            {
-                string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                sb.AppendLine($"- [{card["index"]}] **{card["name"]}** ({card["cost"]} energy{starCost}) [{card["type"]}] {card["rarity"]} - {card["description"]}");
-            }
+                sb.AppendLine($"- [{card["index"]}] {FormatCardDetails(card)}");
             sb.AppendLine();
         }
 
@@ -895,10 +899,7 @@ public static partial class McpMod
                 if (bundle.TryGetValue("cards", out var cardsObj) && cardsObj is List<Dictionary<string, object?>> cards)
                 {
                     foreach (var card in cards)
-                    {
-                        string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                        sb.AppendLine($"  **{card["name"]}** ({card["cost"]} energy{starCost}) [{card["type"]}] {card["rarity"]} - {card["description"]}");
-                    }
+                        sb.AppendLine($"  {FormatCardDetails(card)}");
                 }
             }
             sb.AppendLine();
@@ -915,10 +916,7 @@ public static partial class McpMod
             {
                 sb.AppendLine("### Preview Cards");
                 foreach (var card in previewCards)
-                {
-                    string starCost = card.TryGetValue("star_cost", out var sc) && sc != null ? $" + {sc} star" : "";
-                    sb.AppendLine($"- **{card["name"]}** ({card["cost"]} energy{starCost}) [{card["type"]}] {card["rarity"]} - {card["description"]}");
-                }
+                    sb.AppendLine($"- {FormatCardDetails(card)}");
                 sb.AppendLine();
             }
         }
@@ -980,10 +978,7 @@ public static partial class McpMod
         {
             sb.AppendLine("## Treasure Relics");
             foreach (var relic in relics)
-            {
-                string rarity = relic.TryGetValue("rarity", out var r) && r != null ? $" ({r})" : "";
-                sb.AppendLine($"- [{relic["index"]}] **{relic["name"]}**{rarity} - {relic["description"]}");
-            }
+                sb.AppendLine($"- [{relic["index"]}] {FormatRelicDetails(relic)}");
             sb.AppendLine();
             sb.AppendLine("Use `treasure_claim_relic(relic_index)` to claim a relic.");
         }
