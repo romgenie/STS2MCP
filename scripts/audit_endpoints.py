@@ -96,6 +96,17 @@ def assert_sorted_objects(path: str, field: str, values: object, key: str) -> No
         fail(f"{path} expected {field} to be sorted by {key}")
 
 
+def assert_objects_have_fields(path: str, field: str, values: object, required_fields: list[str]) -> None:
+    if not isinstance(values, list):
+        fail(f"{path} expected {field} to be a list, got {values}")
+    for item in values:
+        if not isinstance(item, dict):
+            fail(f"{path} expected {field} entries to be objects, got {item}")
+        for required_field in required_fields:
+            if required_field not in item:
+                fail(f"{path} {field} entry missing {required_field}: {item}")
+
+
 def assert_context_paths_normalized(path: str, data: object) -> None:
     if not isinstance(data, dict):
         return
@@ -1396,6 +1407,17 @@ def audit_live(base_url: str) -> None:
             if path == "/api/v1/profile":
                 for field in ["characters", "card_stats", "encounter_stats", "enemy_stats", "ancient_stats", "achievements", "epochs"]:
                     assert_sorted_objects(path, field, data.get(field), "id")
+                profile_field_contracts = {
+                    "characters": ["id", "max_ascension", "preferred_ascension", "total_wins", "total_losses", "fastest_win_time", "best_win_streak", "current_win_streak", "playtime"],
+                    "card_stats": ["id", "times_picked", "times_skipped", "times_won", "times_lost"],
+                    "encounter_stats": ["id", "total_wins", "total_losses"],
+                    "enemy_stats": ["id", "total_wins", "total_losses"],
+                    "ancient_stats": ["id", "total_visits", "total_wins", "total_losses"],
+                    "achievements": ["id", "unlocked_at"],
+                    "epochs": ["id", "state", "obtained"],
+                }
+                for field, required_fields in profile_field_contracts.items():
+                    assert_objects_have_fields(path, field, data.get(field), required_fields)
                 for field in ["discovered_cards", "discovered_relics", "discovered_potions", "discovered_events", "discovered_acts"]:
                     assert_sorted_strings(path, field, data.get(field))
             if path == "/api/v1/compendium":
