@@ -484,7 +484,7 @@ async def discard_potion(slot: int) -> str:
 async def proceed_to_map() -> str:
     """Proceed from the current screen to the map.
 
-    Works from: rewards screen, rest site, shop, fake merchant.
+    Works from: rewards screen, rest site, shop, fake merchant, and treasure.
     Does NOT work for events — use event_choose_option() with the Proceed option's index.
     """
     try:
@@ -1084,7 +1084,7 @@ async def mp_rewards_skip_card() -> str:
 async def mp_proceed_to_map() -> str:
     """[Multiplayer] Proceed from the current screen to the map.
 
-    Works from: rewards screen, rest site, shop.
+    Works from: rewards screen, rest site, shop, fake merchant, and treasure.
     """
     try:
         return await _mp_post({"action": "proceed"})

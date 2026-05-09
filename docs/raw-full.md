@@ -1216,7 +1216,7 @@ Skip the card reward (if a skip/bowl option is available).
 
 ### `proceed`
 
-Leave the current screen and open the map. Works from: rewards, rest site, shop, treasure room.
+Leave the current screen and open the map. Works from: rewards, rest site, shop, fake merchant, and treasure room.
 
 ```json
 { "action": "proceed" }
