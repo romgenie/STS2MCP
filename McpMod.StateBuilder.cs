@@ -1135,7 +1135,7 @@ public static partial class McpMod
             int cardIndex = 0;
             foreach (var card in combatState.Hand.Cards)
             {
-                hand.Add(BuildCardState(card, cardIndex));
+                hand.Add(BuildCardState(card, cardIndex, player));
                 cardIndex++;
             }
             state["hand"] = hand;
@@ -1302,6 +1302,12 @@ public static partial class McpMod
             return targets;
 
         var combatState = player.Creature.CombatState;
+        return BuildEnemyTargetRefs(combatState);
+    }
+
+    private static List<Dictionary<string, object?>> BuildEnemyTargetRefs(CombatState? combatState)
+    {
+        var targets = new List<Dictionary<string, object?>>();
         if (combatState == null)
             return targets;
 
@@ -1365,7 +1371,7 @@ public static partial class McpMod
         };
     }
 
-    private static Dictionary<string, object?> BuildCardState(CardModel card, int index)
+    private static Dictionary<string, object?> BuildCardState(CardModel card, int index, Player player)
     {
         card.CanPlay(out var unplayableReason, out _);
         string? blockedReason = unplayableReason != UnplayableReason.None
@@ -1387,6 +1393,10 @@ public static partial class McpMod
         state["index"] = index;
         state["description"] = SafeGetCardDescription(card); // hand cards use default pile
         state["target_type"] = card.TargetType.ToString();
+        state["requires_target"] = card.TargetType == TargetType.AnyEnemy;
+        state["valid_targets"] = card.TargetType == TargetType.AnyEnemy
+            ? BuildEnemyTargetRefs(player.Creature.CombatState)
+            : new List<Dictionary<string, object?>>();
         state["can_play"] = combatReady && blockedReason == null;
         state["unplayable_reason"] = blockedReason;
         return state;

@@ -136,6 +136,10 @@ Always present at the top level (except `menu`). Contains everything about the l
   "star_cost": null,         // Regent star cost as string, null if N/A
   "description": "Deal 6 damage.",
   "target_type": "AnyEnemy", // None, Self, AnyEnemy, AllEnemies, etc.
+  "requires_target": true,
+  "valid_targets": [
+    { "entity_id": "JAW_WORM_0", "combat_id": 12, "name": "Jaw Worm" }
+  ],
   "can_play": true,
   "unplayable_reason": null, // e.g. "NotEnoughEnergy", "NotInPlayPhase", "PlayerActionsDisabled", null if playable
   "is_upgraded": false,
@@ -1188,7 +1192,7 @@ Play a card from hand during combat.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `card_index` | int | Yes | 0-based index in hand |
-| `target` | string | For `AnyEnemy` cards | `entity_id` of the target enemy |
+| `target` | string | When hand card `requires_target` is true | `entity_id` from the card's `valid_targets` list |
 
 **Errors:** Not in combat, not play phase, card unplayable, invalid index, missing target.
 

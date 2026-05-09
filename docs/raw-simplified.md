@@ -34,7 +34,7 @@ Every JSON response includes:
 - `run` — `{ act, floor, ascension }` (absent for `menu`)
 - `player` — full player state: character, HP, gold, deck, relics, potions, `max_potion_slots` (belt capacity, grows with relics), and during combat: energy, hand, piles, orbs (absent for `menu`)
 
-Serialized card objects in hand, deck, piles, rewards, card selections, bundles, and glossary card items include energy/star costs plus upgrade fields: `is_upgraded`, `is_upgradable`, `current_upgrade_level`, `max_upgrade_level`, `upgrade_preview_type`, `upgrade_preview_cost`, `upgrade_preview_star_cost`, and `upgrade_preview_description`. Shop card items expose the same fields with a `card_` prefix, for example `card_upgrade_preview_description`.
+Serialized card objects in hand, deck, piles, rewards, card selections, bundles, and glossary card items include energy/star costs plus upgrade fields: `is_upgraded`, `is_upgradable`, `current_upgrade_level`, `max_upgrade_level`, `upgrade_preview_type`, `upgrade_preview_cost`, `upgrade_preview_star_cost`, and `upgrade_preview_description`. Hand cards also include `requires_target` and `valid_targets` for enemy-targeted cards. Shop card items expose the same fields with a `card_` prefix, for example `card_upgrade_preview_description`.
 
 | `state_type` | Screen | Available Actions |
 |---|---|---|
@@ -116,7 +116,7 @@ When a run is active, the response includes `current_run.run_id` in `{save_scope
 
 | Action | Parameters | When to Use |
 |---|---|---|
-| `play_card` | `card_index`: int, `target`?: string | Play a card from hand. `target` is an `entity_id` (e.g. `"JAW_WORM_0"`), required for single-target cards. |
+| `play_card` | `card_index`: int, `target`?: string | Play a card from hand when `can_play` is true. `target` is required when the card has `requires_target`; use one of `valid_targets`. |
 | `use_potion` | `slot`: int, `target`?: string | Use a potion when its state says `can_use`. `target` required for enemy-targeting potions; use one of `valid_targets`. Works outside combat for non-combat-only, non-enemy-targeting potions. |
 | `discard_potion` | `slot`: int | Discard a potion when its state says `can_discard`. Use when slots are full and you need room for incoming potions. |
 | `end_turn` | _(none)_ | End the player's turn when battle state says `can_end_turn`. |

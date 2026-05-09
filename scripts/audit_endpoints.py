@@ -260,6 +260,9 @@ def audit_static_card_glossary_metadata(repo: Path) -> None:
     if not card_state_match:
         fail("could not locate BuildCardState for can_play audit")
     card_state_body = card_state_match.group(0)
+    for required_fragment in ["requires_target", "valid_targets", "BuildEnemyTargetRefs"]:
+        if required_fragment not in card_state_body:
+            fail(f"hand card state missing target metadata: {required_fragment}")
     for required_guard in ["IsPlayPhase", "PlayerActionsDisabled", "NotInPlayPhase"]:
         if required_guard not in card_state_body:
             fail(f"hand card can_play missing action guard: {required_guard}")

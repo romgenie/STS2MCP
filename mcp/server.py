@@ -509,7 +509,7 @@ async def combat_play_card(card_index: int, target: str | None = None) -> str:
 
     Args:
         card_index: Index of the card in hand (0-based, as shown in game state).
-        target: Entity ID of the target enemy (e.g. "JAW_WORM_0"). Required for single-target cards.
+        target: Entity ID from the hand card's `valid_targets` list. Required when `requires_target` is true.
 
     Note that the index can change as cards are played - playing a card will shift the indices of remaining cards in hand.
     Refer to the latest game state for accurate indices. New cards are drawn to the right, so playing cards from right to left can help maintain more stable indices for remaining cards.
@@ -923,7 +923,7 @@ async def mp_combat_play_card(card_index: int, target: str | None = None) -> str
 
     Args:
         card_index: Index of the card in hand (0-based).
-        target: Entity ID of the target enemy (e.g. "JAW_WORM_0"). Required for single-target cards.
+        target: Entity ID from the hand card's `valid_targets` list. Required when `requires_target` is true.
     """
     body: dict = {"action": "play_card", "card_index": card_index}
     if target is not None:
