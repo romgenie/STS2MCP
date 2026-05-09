@@ -637,6 +637,29 @@ def audit_state_surface(repo: Path) -> None:
         if required_fragment not in rewards_action_body:
             fail(f"claim_reward action missing visibility/enabled guard: {required_fragment}")
 
+    map_state_match = re.search(
+        r"private static Dictionary<string, object\?> BuildMapState\(.*?\n    private static Dictionary<string, object\?> BuildMapNode\(",
+        state_builder,
+        re.S,
+    )
+    if not map_state_match:
+        fail("could not locate BuildMapState for map audit")
+    map_state_body = map_state_match.group(0)
+    map_action_match = re.search(
+        r"private static Dictionary<string, object\?> ExecuteChooseMapNode\(.*?\n    private static Dictionary<string, object\?> ExecuteClaimReward\(",
+        actions,
+        re.S,
+    )
+    if not map_action_match:
+        fail("could not locate ExecuteChooseMapNode for map audit")
+    map_action_body = map_action_match.group(0)
+    for required_fragment in ["IsVisibleInTree", "is_visible", "can_travel"]:
+        if required_fragment not in map_state_body:
+            fail(f"map next_options missing visibility/travel metadata: {required_fragment}")
+    for required_fragment in ["IsVisibleInTree", "MapPointState.Travelable"]:
+        if required_fragment not in map_action_body:
+            fail(f"choose_map_node action missing visibility/travel guard: {required_fragment}")
+
     print(f"states: {len(state_types)} documented, markdown coverage enforced")
 
 

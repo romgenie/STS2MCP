@@ -556,6 +556,8 @@ Pick one card to add to your deck. Appears after claiming a card reward, or dire
         "index": 0,
         "col": 2, "row": 3,
         "type": "RestSite",
+        "is_visible": true,
+        "can_travel": true,
         "leads_to": [            // 1-level lookahead (children)
           { "col": 1, "row": 4, "type": "Elite" },
           { "col": 3, "row": 4, "type": "Shop" }

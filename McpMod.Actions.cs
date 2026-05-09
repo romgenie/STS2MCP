@@ -444,7 +444,7 @@ public static partial class McpMod
         int index = indexElem.GetInt32();
 
         var travelable = FindAll<NMapPoint>(mapScreen)
-            .Where(mp => mp.State == MapPointState.Travelable && mp.Point != null)
+            .Where(mp => mp.State == MapPointState.Travelable && mp.Point != null && mp.Visible && mp.IsVisibleInTree())
             .OrderBy(mp => mp.Point!.coord.col)
             .ToList();
 

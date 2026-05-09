@@ -1913,7 +1913,7 @@ public static partial class McpMod
         if (mapScreen != null)
         {
             var travelable = FindAll<NMapPoint>(mapScreen)
-                .Where(mp => mp.State == MapPointState.Travelable && mp.Point != null)
+                .Where(mp => mp.State == MapPointState.Travelable && mp.Point != null && mp.Visible && mp.IsVisibleInTree())
                 .OrderBy(mp => mp.Point!.coord.col)
                 .ToList();
 
@@ -1926,7 +1926,9 @@ public static partial class McpMod
                     ["index"] = index,
                     ["col"] = pt.coord.col,
                     ["row"] = pt.coord.row,
-                    ["type"] = pt.PointType.ToString()
+                    ["type"] = pt.PointType.ToString(),
+                    ["is_visible"] = true,
+                    ["can_travel"] = true
                 };
 
                 // 1-level lookahead

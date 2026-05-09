@@ -622,6 +622,8 @@ async def rewards_skip_card() -> str:
 async def map_choose_node(node_index: int) -> str:
     """[Map] Choose a map node to travel to.
 
+    Only visible travelable nodes from next_options are actionable.
+
     Args:
         node_index: 0-based index of the node from the next_options list.
     """
@@ -998,6 +1000,7 @@ async def mp_map_vote(node_index: int) -> str:
 
     In multiplayer, map selection is a vote — travel happens when all players
     agree. Re-voting for the same node sends a ping to other players.
+    Only visible travelable nodes from next_options are actionable.
 
     Args:
         node_index: 0-based index of the node from the next_options list.

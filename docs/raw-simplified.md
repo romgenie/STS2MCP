@@ -146,7 +146,7 @@ When a run is active, the response includes `current_run.run_id` in `{save_scope
 
 | Action | Parameters | When to Use |
 |---|---|---|
-| `choose_map_node` | `index`: int | Travel to a node from `next_options`. |
+| `choose_map_node` | `index`: int | Travel to a visible travelable node from `next_options`. |
 
 ### Event (`event`)
 
