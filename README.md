@@ -58,10 +58,25 @@ A successful response looks like:
 {
   "message": "Hello from STS2 MCP v0.4.0",
   "status": "ok",
+  "kind": "api_index",
+  "version": "0.4.0",
   "bound_prefixes": ["http://localhost:15526/", "http://127.0.0.1:15526/"],
+  "endpoint_count": 14,
   "endpoints": [
     { "method": "GET", "path": "/api/v1/singleplayer" },
-    { "method": "POST", "path": "/api/v1/singleplayer" }
+    { "method": "POST", "path": "/api/v1/singleplayer" },
+    { "method": "GET", "path": "/api/v1/multiplayer" },
+    { "method": "POST", "path": "/api/v1/multiplayer" },
+    { "method": "GET", "path": "/api/v1/settings" },
+    { "method": "GET", "path": "/api/v1/profile" },
+    { "method": "GET", "path": "/api/v1/compendium" },
+    { "method": "GET", "path": "/api/v1/bestiary" },
+    { "method": "GET", "path": "/api/v1/glossary/cards" },
+    { "method": "GET", "path": "/api/v1/glossary/relics" },
+    { "method": "GET", "path": "/api/v1/glossary/potions" },
+    { "method": "GET", "path": "/api/v1/glossary/keywords" },
+    { "method": "GET", "path": "/api/v1/profiles" },
+    { "method": "POST", "path": "/api/v1/profiles" }
   ]
 }
 ```

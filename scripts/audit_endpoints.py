@@ -118,6 +118,7 @@ def assert_context_paths_normalized(path: str, data: object) -> None:
 
 def audit_docs(repo: Path) -> None:
     raw_full = (repo / "docs" / "raw-full.md").read_text(encoding="utf-8")
+    readme = (repo / "README.md").read_text(encoding="utf-8")
     mcp_mod = (repo / "McpMod.cs").read_text(encoding="utf-8")
     expected = set(EXPECTED_ENDPOINTS)
 
@@ -163,6 +164,13 @@ def audit_docs(repo: Path) -> None:
     ]:
         if required_fragment not in mcp_mod:
             fail(f"root endpoint index missing response-context description: {required_fragment}")
+
+    for required_fragment in ['"kind": "api_index"', '"version": "0.4.0"', '"endpoint_count": 14']:
+        if required_fragment not in readme:
+            fail(f"README root endpoint example missing API index field: {required_fragment}")
+    for method, path in EXPECTED_ENDPOINTS:
+        if f'"method": "{method}", "path": "{path}"' not in readme:
+            fail(f"README root endpoint example missing advertised endpoint: {method} {path}")
     print(f"docs: {len(documented)} endpoints documented")
 
 
