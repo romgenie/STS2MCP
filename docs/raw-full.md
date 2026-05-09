@@ -989,7 +989,7 @@ Returns reflected monster and encounter metadata. Profile-specific encounter and
 
 ### `GET /api/v1/glossary/*`
 
-The glossary endpoints expose active-run pool metadata. They require a run in progress and are scoped to the current run/character context, not profile-wide discovered content. Successful responses are structured objects with `status`, `kind`, `scope`, `count`, `current_run`, `players`, and `items`.
+The glossary endpoints expose active-run pool metadata. They require a run in progress and are scoped to the current run/character context plus shared run pools such as Colorless cards, shared relics, and shared potions, not profile-wide discovered content. Successful responses are structured objects with `status`, `kind`, `scope`, `count`, `current_run`, `players`, and `items`.
 
 - `GET /api/v1/glossary/cards`: active-run card pool metadata.
 - `GET /api/v1/glossary/relics`: active-run relic pool metadata.

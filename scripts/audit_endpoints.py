@@ -193,7 +193,22 @@ def audit_static_glossary_scope(repo: Path) -> None:
         fail("could not locate BuildGlossaryRelics for scope audit")
     if "Assembly.GetTypes()" in relic_match.group(0) or "typeof(RelicModel)" in relic_match.group(0):
         fail("relic glossary must stay scoped to active run relic pools, not reflected assembly-wide relics")
-    print("glossary: active-run relic scope enforced")
+    required_shared_pools = {
+        "BuildGlossaryCards": "ModelDb.CardPool<ColorlessCardPool>",
+        "BuildGlossaryRelics": "ModelDb.RelicPool<SharedRelicPool>",
+        "BuildGlossaryPotions": "ModelDb.PotionPool<SharedPotionPool>",
+        "BuildGlossaryKeywords": "ModelDb.RelicPool<SharedRelicPool>",
+    }
+    for method, required in required_shared_pools.items():
+        match = re.search(
+            rf"internal static object {method}\(\).*?(?=\n    internal static object|\n    private static|\n    internal static|\n\}})",
+            fork_endpoints,
+            re.S,
+        )
+        if not match or required not in match.group(0):
+            fail(f"{method} must include active-run shared pool {required}")
+
+    print("glossary: active-run shared/scoped pools enforced")
 
 
 def audit_state_surface(repo: Path) -> None:

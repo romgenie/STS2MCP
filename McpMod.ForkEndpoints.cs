@@ -5,8 +5,11 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Models.Monsters;
+using MegaCrit.Sts2.Core.Models.PotionPools;
+using MegaCrit.Sts2.Core.Models.RelicPools;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 
@@ -243,39 +246,50 @@ public static partial class McpMod
         var result = new List<Dictionary<string, object?>>();
         var seen = new HashSet<string>();
 
+        var colorlessPool = ModelDb.CardPool<ColorlessCardPool>();
+        AddCardsFromPool(colorlessPool, SafeGetText(() => colorlessPool.Title) ?? colorlessPool.Id.Entry, result, seen);
+
         foreach (var player in runState.Players)
         {
             var pool = player.Character?.CardPool;
             if (pool == null) continue;
             var poolName = SafeGetText(() => pool.Title) ?? "Unknown";
-
-            foreach (var card in pool.AllCards)
-            {
-                var id = card.Id.Entry;
-                if (seen.Contains(id)) continue;
-                seen.Add(id);
-
-                string costDisplay;
-                if (card.EnergyCost.CostsX)
-                    costDisplay = "X";
-                else
-                    costDisplay = card.EnergyCost.GetAmountToSpend().ToString();
-
-                result.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = id,
-                    ["name"] = SafeGetText(() => card.Title),
-                    ["type"] = card.Type.ToString(),
-                    ["cost"] = costDisplay,
-                    ["description"] = SafeGetCardDescription(card),
-                    ["rarity"] = card.Rarity.ToString(),
-                    ["pool"] = poolName,
-                    ["keywords"] = BuildHoverTips(card.HoverTips)
-                });
-            }
+            AddCardsFromPool(pool, poolName, result, seen);
         }
 
         return result;
+    }
+
+    private static void AddCardsFromPool(
+        CardPoolModel pool,
+        string poolName,
+        List<Dictionary<string, object?>> result,
+        HashSet<string> seen)
+    {
+        foreach (var card in pool.AllCards)
+        {
+            var id = card.Id.Entry;
+            if (seen.Contains(id)) continue;
+            seen.Add(id);
+
+            string costDisplay;
+            if (card.EnergyCost.CostsX)
+                costDisplay = "X";
+            else
+                costDisplay = card.EnergyCost.GetAmountToSpend().ToString();
+
+            result.Add(new Dictionary<string, object?>
+            {
+                ["id"] = id,
+                ["name"] = SafeGetText(() => card.Title),
+                ["type"] = card.Type.ToString(),
+                ["cost"] = costDisplay,
+                ["description"] = SafeGetCardDescription(card),
+                ["rarity"] = card.Rarity.ToString(),
+                ["pool"] = poolName,
+                ["keywords"] = BuildHoverTips(card.HoverTips)
+            });
+        }
     }
 
     internal static object BuildGlossaryRelics()
@@ -290,32 +304,43 @@ public static partial class McpMod
         var result = new List<Dictionary<string, object?>>();
         var seen = new HashSet<string>();
 
+        var sharedPool = ModelDb.RelicPool<SharedRelicPool>();
+        AddRelicsFromPool(sharedPool, "Shared", result, seen);
+
         foreach (var player in runState.Players)
         {
             var character = player.Character;
             if (character == null || character.RelicPool == null) continue;
             var pool = character.RelicPool;
             var poolName = SafeGetText(() => character.Title) ?? "Unknown";
-
-            foreach (var relic in pool.AllRelics)
-            {
-                var id = relic.Id.Entry;
-                if (seen.Contains(id)) continue;
-                seen.Add(id);
-
-                result.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = id,
-                    ["name"] = SafeGetText(() => relic.Title),
-                    ["description"] = SafeGetText(() => relic.DynamicDescription),
-                    ["rarity"] = relic.Rarity.ToString(),
-                    ["pool"] = poolName,
-                    ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
-                });
-            }
+            AddRelicsFromPool(pool, poolName, result, seen);
         }
 
         return result;
+    }
+
+    private static void AddRelicsFromPool(
+        RelicPoolModel pool,
+        string poolName,
+        List<Dictionary<string, object?>> result,
+        HashSet<string> seen)
+    {
+        foreach (var relic in pool.AllRelics)
+        {
+            var id = relic.Id.Entry;
+            if (seen.Contains(id)) continue;
+            seen.Add(id);
+
+            result.Add(new Dictionary<string, object?>
+            {
+                ["id"] = id,
+                ["name"] = SafeGetText(() => relic.Title),
+                ["description"] = SafeGetText(() => relic.DynamicDescription),
+                ["rarity"] = relic.Rarity.ToString(),
+                ["pool"] = poolName,
+                ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
+            });
+        }
     }
 
     internal static object BuildGlossaryPotions()
@@ -330,34 +355,45 @@ public static partial class McpMod
         var result = new List<Dictionary<string, object?>>();
         var seen = new HashSet<string>();
 
+        var sharedPool = ModelDb.PotionPool<SharedPotionPool>();
+        AddPotionsFromPool(sharedPool, "Shared", result, seen);
+
         foreach (var player in runState.Players)
         {
             var character = player.Character;
             if (character == null || character.PotionPool == null) continue;
             var pool = character.PotionPool;
             var poolName = SafeGetText(() => character.Title) ?? "Unknown";
-
-            foreach (var potion in pool.AllPotions)
-            {
-                var id = potion.Id.Entry;
-                if (seen.Contains(id)) continue;
-                seen.Add(id);
-
-                result.Add(new Dictionary<string, object?>
-                {
-                    ["id"] = id,
-                    ["name"] = SafeGetText(() => potion.Title),
-                    ["description"] = SafeGetText(() => potion.DynamicDescription),
-                    ["rarity"] = potion.Rarity.ToString(),
-                    ["target_type"] = potion.TargetType.ToString(),
-                    ["usage"] = potion.Usage.ToString(),
-                    ["pool"] = poolName,
-                    ["keywords"] = BuildHoverTips(potion.ExtraHoverTips)
-                });
-            }
+            AddPotionsFromPool(pool, poolName, result, seen);
         }
 
         return result;
+    }
+
+    private static void AddPotionsFromPool(
+        PotionPoolModel pool,
+        string poolName,
+        List<Dictionary<string, object?>> result,
+        HashSet<string> seen)
+    {
+        foreach (var potion in pool.AllPotions)
+        {
+            var id = potion.Id.Entry;
+            if (seen.Contains(id)) continue;
+            seen.Add(id);
+
+            result.Add(new Dictionary<string, object?>
+            {
+                ["id"] = id,
+                ["name"] = SafeGetText(() => potion.Title),
+                ["description"] = SafeGetText(() => potion.DynamicDescription),
+                ["rarity"] = potion.Rarity.ToString(),
+                ["target_type"] = potion.TargetType.ToString(),
+                ["usage"] = potion.Usage.ToString(),
+                ["pool"] = poolName,
+                ["keywords"] = BuildHoverTips(potion.ExtraHoverTips)
+            });
+        }
     }
 
     internal static object BuildGlossaryKeywords()
@@ -371,45 +407,34 @@ public static partial class McpMod
 
         var keywords = new Dictionary<string, string>();
 
+        foreach (var card in ModelDb.CardPool<ColorlessCardPool>().AllCards)
+            AddKeywordTips(card.HoverTips, keywords);
+        foreach (var relic in ModelDb.RelicPool<SharedRelicPool>().AllRelics)
+            AddKeywordTips(relic.HoverTipsExcludingRelic, keywords);
+        foreach (var potion in ModelDb.PotionPool<SharedPotionPool>().AllPotions)
+            AddKeywordTips(potion.ExtraHoverTips, keywords);
+
         foreach (var player in runState.Players)
         {
             var cardPool = player.Character?.CardPool;
             if (cardPool != null)
             {
                 foreach (var card in cardPool.AllCards)
-                    foreach (var tip in card.HoverTips)
-                        if (tip is HoverTip ht)
-                        {
-                            var title = SafeGetText(() => ht.Title);
-                            if (!string.IsNullOrEmpty(title))
-                                keywords[title!] = SafeGetText(() => ht.Description) ?? "";
-                        }
+                    AddKeywordTips(card.HoverTips, keywords);
             }
 
             var relicPool = player.Character?.RelicPool;
             if (relicPool != null)
             {
                 foreach (var relic in relicPool.AllRelics)
-                    foreach (var tip in relic.HoverTipsExcludingRelic)
-                        if (tip is HoverTip ht)
-                        {
-                            var title = SafeGetText(() => ht.Title);
-                            if (!string.IsNullOrEmpty(title))
-                                keywords[title!] = SafeGetText(() => ht.Description) ?? "";
-                        }
+                    AddKeywordTips(relic.HoverTipsExcludingRelic, keywords);
             }
 
             var potionPool = player.Character?.PotionPool;
             if (potionPool != null)
             {
                 foreach (var potion in potionPool.AllPotions)
-                    foreach (var tip in potion.ExtraHoverTips)
-                        if (tip is HoverTip ht)
-                        {
-                            var title = SafeGetText(() => ht.Title);
-                            if (!string.IsNullOrEmpty(title))
-                                keywords[title!] = SafeGetText(() => ht.Description) ?? "";
-                        }
+                    AddKeywordTips(potion.ExtraHoverTips, keywords);
             }
         }
 
@@ -424,6 +449,19 @@ public static partial class McpMod
         }
 
         return result;
+    }
+
+    private static void AddKeywordTips(IEnumerable<object> tips, Dictionary<string, string> keywords)
+    {
+        foreach (var tip in tips)
+        {
+            if (tip is not HoverTip ht)
+                continue;
+
+            var title = SafeGetText(() => ht.Title);
+            if (!string.IsNullOrEmpty(title))
+                keywords[title!] = SafeGetText(() => ht.Description) ?? "";
+        }
     }
 
     internal static object BuildBestiary()
