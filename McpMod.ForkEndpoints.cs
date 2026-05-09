@@ -458,7 +458,7 @@ public static partial class McpMod
         if (runState == null)
             return GlossaryError("Could not read run state.", RunStateUnavailableErrorCode);
 
-        var keywords = new Dictionary<string, string>();
+        var keywords = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (var pool in ModelDb.AllSharedCardPools)
             foreach (var card in pool.AllCards)
@@ -493,7 +493,7 @@ public static partial class McpMod
         }
 
         var result = new List<Dictionary<string, object?>>();
-        foreach (var kv in keywords.OrderBy(k => k.Key))
+        foreach (var kv in keywords.OrderBy(k => k.Key, StringComparer.Ordinal))
         {
             result.Add(new Dictionary<string, object?>
             {
@@ -519,7 +519,7 @@ public static partial class McpMod
 
                 var title = SafeGetText(() => ht.Title);
                 if (!string.IsNullOrEmpty(title))
-                    keywords[title!] = SafeGetText(() => ht.Description) ?? "";
+                    keywords.TryAdd(title!, SafeGetText(() => ht.Description) ?? "");
             }
             catch
             {

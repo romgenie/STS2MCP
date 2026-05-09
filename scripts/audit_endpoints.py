@@ -483,6 +483,20 @@ def audit_static_glossary_scope(repo: Path) -> None:
         )
         if not match or 'SortDictionaryListByStringField(result, "id")' not in match.group(0):
             fail(f"{method} must return deterministically sorted item IDs")
+    keywords_match = re.search(
+        r"internal static object BuildGlossaryKeywords\(\).*?\n    private static void AddKeywordTips",
+        fork_endpoints,
+        re.S,
+    )
+    if not keywords_match:
+        fail("could not locate BuildGlossaryKeywords for deterministic keyword audit")
+    keywords_body = keywords_match.group(0)
+    for required_fragment in [
+        "new Dictionary<string, string>(StringComparer.Ordinal)",
+        "OrderBy(k => k.Key, StringComparer.Ordinal)",
+    ]:
+        if required_fragment not in keywords_body:
+            fail(f"BuildGlossaryKeywords must use ordinal deterministic keyword ordering: {required_fragment}")
 
     send_match = re.search(
         r"private static void SendGlossaryJson\(.*?\n    private static Dictionary<string, object\?> GlossaryError\(",
@@ -508,7 +522,7 @@ def audit_static_glossary_scope(repo: Path) -> None:
     if not keyword_tip_match:
         fail("could not locate AddKeywordTips for glossary keyword stability audit")
     keyword_tip_body = keyword_tip_match.group(0)
-    for required_fragment in ["IEnumerable<IHoverTip>?", "tips == null", "IHoverTip.RemoveDupes", "catch"]:
+    for required_fragment in ["IEnumerable<IHoverTip>?", "tips == null", "IHoverTip.RemoveDupes", "TryAdd", "catch"]:
         if required_fragment not in keyword_tip_body:
             fail(f"glossary keyword collection must be null/transition safe: {required_fragment}")
 
