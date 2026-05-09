@@ -1173,6 +1173,11 @@ public static partial class McpMod
 
         state["gold"] = player.Gold;
 
+        var deck = BuildDeckCardList(player);
+        state["deck_count"] = deck.Count;
+        if (deck.Count > 0)
+            state["deck"] = deck;
+
         // Powers (status effects)
         state["status"] = BuildPowersState(creature);
 
@@ -1271,6 +1276,63 @@ public static partial class McpMod
             list.Add(cardInfo);
         }
         return list;
+    }
+
+    private static List<Dictionary<string, object?>> BuildDeckCardList(Player player)
+    {
+        var list = new List<Dictionary<string, object?>>();
+        var index = 0;
+        foreach (var card in GetPlayerDeckCards(player))
+        {
+            var cardInfo = BuildCardInfo(card);
+            cardInfo["index"] = index++;
+            list.Add(cardInfo);
+        }
+        return list;
+    }
+
+    private static IEnumerable<CardModel> GetPlayerDeckCards(Player player)
+    {
+        var deck = GetMemberValue(player, "Deck");
+        if (deck == null)
+            yield break;
+
+        var cards = GetMemberValue(deck, "Cards") ?? deck;
+        if (cards is not System.Collections.IEnumerable enumerable)
+            yield break;
+
+        foreach (var item in enumerable)
+        {
+            if (item is CardModel card)
+                yield return card;
+        }
+    }
+
+    private static object? GetMemberValue(object source, string memberName)
+    {
+        const System.Reflection.BindingFlags Flags =
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.NonPublic;
+
+        var type = source.GetType();
+        try
+        {
+            var property = type.GetProperty(memberName, Flags);
+            if (property != null)
+                return property.GetValue(source);
+        }
+        catch { }
+
+        try
+        {
+            var field = type.GetField(memberName, Flags);
+            if (field != null)
+                return field.GetValue(source);
+        }
+        catch { }
+
+        return null;
     }
 
     private static Dictionary<string, object?> BuildEnemyState(Creature creature, Dictionary<string, int> entityCounts)

@@ -32,7 +32,7 @@ Singleplayer and multiplayer endpoints are mutually exclusive (HTTP 409 if misma
 Every JSON response includes:
 - `state_type` — which screen the game is on (see below)
 - `run` — `{ act, floor, ascension }` (absent for `menu`)
-- `player` — full player state: character, HP, gold, relics, potions, `max_potion_slots` (belt capacity, grows with relics), and during combat: energy, hand, piles, orbs (absent for `menu`)
+- `player` — full player state: character, HP, gold, deck, relics, potions, `max_potion_slots` (belt capacity, grows with relics), and during combat: energy, hand, piles, orbs (absent for `menu`)
 
 | `state_type` | Screen | Available Actions |
 |---|---|---|

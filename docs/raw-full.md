@@ -89,6 +89,8 @@ Always present at the top level (except `menu`). Contains everything about the l
 
   // --- Always present ---
   "status": [ /* Power Objects */ ],
+  "deck_count": 10,
+  "deck": [ /* Pile Card Objects */ ],
   "relics": [
     {
       "id": "BURNING_BLOOD",
