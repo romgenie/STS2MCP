@@ -251,6 +251,12 @@ def audit_live(base_url: str) -> None:
             current_run = data.get("current_run")
             if not isinstance(current_run, dict) or not current_run.get("run_id") or not current_run.get("seed"):
                 fail(f"{path} expected current_run run_id and seed, got {current_run}")
+            if expected_kind == "keywords":
+                keyword_names = {str(item.get("name")) for item in data["items"] if isinstance(item, dict)}
+                item_names = {"Blood Potion", "Brimstone", "Burning Blood"}
+                leaked = sorted(keyword_names & item_names)
+                if leaked:
+                    fail(f"{path} leaked item self-tooltips into keyword glossary: {leaked}")
 
     status, data = load_json_url(base_url.rstrip("/") + "/api/v1/singleplayer?format=json")
     if status != 200 or not isinstance(data, dict) or "state_type" not in data:

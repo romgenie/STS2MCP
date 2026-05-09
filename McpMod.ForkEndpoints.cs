@@ -415,7 +415,7 @@ public static partial class McpMod
             if (relicPool != null)
             {
                 foreach (var relic in relicPool.AllRelics)
-                    foreach (var tip in relic.HoverTips)
+                    foreach (var tip in relic.HoverTipsExcludingRelic)
                         if (tip is HoverTip ht)
                         {
                             var title = SafeGetText(() => ht.Title);
@@ -428,7 +428,7 @@ public static partial class McpMod
             if (potionPool != null)
             {
                 foreach (var potion in potionPool.AllPotions)
-                    foreach (var tip in potion.HoverTips)
+                    foreach (var tip in potion.ExtraHoverTips)
                         if (tip is HoverTip ht)
                         {
                             var title = SafeGetText(() => ht.Title);
