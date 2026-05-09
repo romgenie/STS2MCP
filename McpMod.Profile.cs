@@ -76,10 +76,12 @@ public static partial class McpMod
             SendError(response, 400, "'profile_id' field must be a number");
             return;
         }
-
-        int profileId = parsed.TryGetValue("profile_id", out idElem) && idElem.ValueKind == JsonValueKind.Number
-            ? idElem.GetInt32()
-            : 0;
+        int profileId = 0;
+        if (idElem.ValueKind == JsonValueKind.Number && !idElem.TryGetInt32(out profileId))
+        {
+            SendError(response, 400, "'profile_id' field must be a 32-bit integer");
+            return;
+        }
 
         try
         {
