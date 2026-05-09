@@ -100,7 +100,7 @@ def assert_context_paths_normalized(path: str, data: object) -> None:
     if not isinstance(data, dict):
         return
 
-    for field in ["progress_path", "resolved_progress_path", "profile_root", "save_path", "history_path"]:
+    for field in ["path", "resolved_path", "progress_path", "resolved_progress_path", "profile_root", "save_path", "history_path"]:
         value = data.get(field)
         if isinstance(value, str) and "\\" in value:
             fail(f"{path} expected {field} to use forward slashes, got {value!r}")
