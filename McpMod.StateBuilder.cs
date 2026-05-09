@@ -1190,6 +1190,7 @@ public static partial class McpMod
                 ["id"] = relic.Id.Entry,
                 ["name"] = SafeGetText(() => relic.Title),
                 ["description"] = SafeGetText(() => relic.DynamicDescription),
+                ["rarity"] = relic.Rarity.ToString(),
                 ["counter"] = relic.ShowCounter ? relic.DisplayAmount : null,
                 ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
             });
@@ -1208,9 +1209,11 @@ public static partial class McpMod
                     ["id"] = potion.Id.Entry,
                     ["name"] = SafeGetText(() => potion.Title),
                     ["description"] = SafeGetText(() => potion.DynamicDescription),
+                    ["rarity"] = potion.Rarity.ToString(),
                     ["slot"] = slotIndex,
                     ["can_use_in_combat"] = potion.Usage == PotionUsage.CombatOnly || potion.Usage == PotionUsage.AnyTime,
                     ["target_type"] = potion.TargetType.ToString(),
+                    ["usage"] = potion.Usage.ToString(),
                     ["keywords"] = BuildHoverTips(potion.ExtraHoverTips)
                 });
             }

@@ -96,6 +96,7 @@ Always present at the top level (except `menu`). Contains everything about the l
       "id": "BURNING_BLOOD",
       "name": "Burning Blood",
       "description": "At the end of combat, heal 6 HP.",
+      "rarity": "Starter",
       "counter": null,       // Number if relic shows a counter, null otherwise
       "keywords": [ /* Keyword Objects */ ]
     }
@@ -105,9 +106,11 @@ Always present at the top level (except `menu`). Contains everything about the l
       "id": "SWIFT_POTION",
       "name": "Swift Potion",
       "description": "Draw 3 cards.",
+      "rarity": "Common",
       "slot": 0,             // Potion slot index (use this for use_potion action)
       "can_use_in_combat": true,
       "target_type": "None", // None, Self, AnyEnemy, AnyAlly, AnyPlayer, etc.
+      "usage": "Manual",
       "keywords": [ /* Keyword Objects */ ]
     }
   ],
