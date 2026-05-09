@@ -568,7 +568,10 @@ public static partial class McpMod
                 }
             }
             if (moves.Count > 0)
-                entry["moves"] = moves;
+                entry["moves"] = moves
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(move => move, StringComparer.Ordinal)
+                    .ToList();
 
             monsters.Add(entry);
         }
@@ -621,7 +624,10 @@ public static partial class McpMod
                     matchingMonsters.Add(monsterClass);
             }
             if (matchingMonsters.Count > 0)
-                entry["likely_monsters"] = matchingMonsters;
+                entry["likely_monsters"] = matchingMonsters
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(monster => monster, StringComparer.Ordinal)
+                    .ToList();
 
             encounters.Add(entry);
         }

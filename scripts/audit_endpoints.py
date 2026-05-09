@@ -507,6 +507,30 @@ def audit_static_glossary_scope(repo: Path) -> None:
     print("glossary: active-run shared/scoped pools and profile context enforced")
 
 
+def audit_static_bestiary_determinism(repo: Path) -> None:
+    fork_endpoints = (repo / "McpMod.ForkEndpoints.cs").read_text(encoding="utf-8")
+    bestiary_match = re.search(
+        r"internal static object BuildBestiary\(\).*?\n    \}",
+        fork_endpoints,
+        re.S,
+    )
+    if not bestiary_match:
+        fail("could not locate BuildBestiary for bestiary determinism audit")
+    bestiary_body = bestiary_match.group(0)
+    for required_fragment in [
+        "orderedMonsters",
+        "orderedEncounters",
+        "entry[\"moves\"] = moves",
+        "Distinct(StringComparer.Ordinal)",
+        "OrderBy(move => move, StringComparer.Ordinal)",
+        "entry[\"likely_monsters\"] = matchingMonsters",
+        "OrderBy(monster => monster, StringComparer.Ordinal)",
+    ]:
+        if required_fragment not in bestiary_body:
+            fail(f"bestiary endpoint missing deterministic nested ordering: {required_fragment}")
+    print("bestiary: deterministic nested metadata ordering enforced")
+
+
 def audit_static_card_glossary_metadata(repo: Path) -> None:
     fork_endpoints = (repo / "McpMod.ForkEndpoints.cs").read_text(encoding="utf-8")
     state_builder = (repo / "McpMod.StateBuilder.cs").read_text(encoding="utf-8")
@@ -1303,6 +1327,13 @@ def audit_live(base_url: str) -> None:
             encounter_ids = [str(item.get("id")) for item in encounters if isinstance(item, dict)]
             if monster_ids != sorted(monster_ids) or encounter_ids != sorted(encounter_ids):
                 fail(f"{path} expected deterministic id ordering")
+            for item in [*monsters, *encounters]:
+                if not isinstance(item, dict):
+                    fail(f"{path} expected bestiary entries to be objects, got {item}")
+                for field in ["moves", "likely_monsters"]:
+                    values = item.get(field)
+                    if values is not None:
+                        assert_sorted_strings(path, field, values)
 
         if path.startswith("/api/v1/glossary/") and status not in {200, 409, 503}:
             fail(f"{path} expected HTTP 200, 409, or 503, got {status}: {data}")
@@ -1484,6 +1515,7 @@ def main() -> None:
     audit_static_formatters(repo)
     audit_static_error_shapes(repo)
     audit_static_glossary_scope(repo)
+    audit_static_bestiary_determinism(repo)
     audit_static_card_glossary_metadata(repo)
     audit_static_save_roots(repo)
     audit_state_surface(repo)
