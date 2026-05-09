@@ -378,6 +378,9 @@ Run state or room type not recognized.
     "round": 1,
     "turn": "player",       // "player" or "enemy"
     "is_play_phase": true,
+    "player_actions_disabled": false,
+    "can_end_turn": true,
+    "end_turn_blocked_reason": null, // e.g. "NotInPlayPhase", "PlayerActionsDisabled", "CardInPlay", "HandSelectionMode"
     "enemies": [
       {
         "entity_id": "JAW_WORM_0",    // Synthesized ID for targeting
@@ -1217,7 +1220,7 @@ End the player's combat turn.
 { "action": "end_turn" }
 ```
 
-**Errors:** Not in combat, not play phase, card mid-play, hand in selection mode.
+**Errors:** Not in combat, not play phase, actions disabled, card mid-play, hand in selection mode.
 
 ### `combat_select_card`
 

@@ -567,6 +567,29 @@ def audit_state_surface(repo: Path) -> None:
         if required_fragment not in potion_action_body:
             fail(f"use_potion action missing readiness guard: {required_fragment}")
 
+    battle_state_match = re.search(
+        r"private static Dictionary<string, object\?> BuildBattleState\(.*?\n    private static Dictionary<string, object\?> BuildPlayerState\(",
+        state_builder,
+        re.S,
+    )
+    if not battle_state_match:
+        fail("could not locate BuildBattleState for end-turn audit")
+    battle_state_body = battle_state_match.group(0)
+    end_turn_action_match = re.search(
+        r"private static Dictionary<string, object\?> ExecuteEndTurn\(.*?\n    private static Dictionary<string, object\?> ExecuteUsePotion\(",
+        actions,
+        re.S,
+    )
+    if not end_turn_action_match:
+        fail("could not locate ExecuteEndTurn for end-turn audit")
+    end_turn_action_body = end_turn_action_match.group(0)
+    for required_fragment in ["can_end_turn", "end_turn_blocked_reason", "GetEndTurnBlockedReason"]:
+        if required_fragment not in battle_state_body:
+            fail(f"battle state missing end-turn readiness metadata: {required_fragment}")
+    for required_fragment in ["PlayerActionsDisabled", "InCardPlay", "CurrentMode != NPlayerHand.Mode.Play"]:
+        if required_fragment not in end_turn_action_body:
+            fail(f"end_turn action missing readiness guard: {required_fragment}")
+
     print(f"states: {len(state_types)} documented, markdown coverage enforced")
 
 

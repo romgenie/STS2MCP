@@ -1067,6 +1067,10 @@ public static partial class McpMod
         battle["round"] = combatState.RoundNumber;
         battle["turn"] = combatState.CurrentSide.ToString().ToLower();
         battle["is_play_phase"] = CombatManager.Instance.IsPlayPhase;
+        battle["player_actions_disabled"] = CombatManager.Instance.PlayerActionsDisabled;
+        var endTurnBlockedReason = GetEndTurnBlockedReason();
+        battle["can_end_turn"] = endTurnBlockedReason == null;
+        battle["end_turn_blocked_reason"] = endTurnBlockedReason;
 
         // Enemies
         var enemies = new List<Dictionary<string, object?>>();
@@ -1081,6 +1085,24 @@ public static partial class McpMod
         battle["enemies"] = enemies;
 
         return battle;
+    }
+
+    private static string? GetEndTurnBlockedReason()
+    {
+        if (!CombatManager.Instance.IsInProgress)
+            return "NotInCombat";
+        if (!CombatManager.Instance.IsPlayPhase)
+            return "NotInPlayPhase";
+        if (CombatManager.Instance.PlayerActionsDisabled)
+            return "PlayerActionsDisabled";
+
+        var hand = NCombatRoom.Instance?.Ui?.Hand;
+        if (hand != null && hand.InCardPlay)
+            return "CardInPlay";
+        if (hand != null && hand.CurrentMode != NPlayerHand.Mode.Play)
+            return "HandSelectionMode";
+
+        return null;
     }
 
     private static Dictionary<string, object?> BuildPlayerState(Player player)

@@ -525,7 +525,7 @@ async def combat_play_card(card_index: int, target: str | None = None) -> str:
 
 @mcp.tool()
 async def combat_end_turn() -> str:
-    """[Combat] End the player's current turn."""
+    """[Combat] End the player's current turn when battle state says can_end_turn."""
     try:
         return await _post({"action": "end_turn"})
     except Exception as e:
