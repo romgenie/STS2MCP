@@ -87,6 +87,7 @@ public static partial class McpMod
         {
             // Optional settings UI patches should not block the HTTP bridge itself.
             TryApplyHarmonyPatches();
+            InitializeSnapshotSupport();
 
             // Connect to main thread process frame for action execution
             var tree = (SceneTree)Engine.GetMainLoop();
@@ -355,6 +356,15 @@ public static partial class McpMod
                 else
                     SendMethodNotAllowed(response);
             }
+            else if (path == "/api/v1/snapshots")
+            {
+                if (request.HttpMethod == "GET")
+                    HandleGetSnapshots(response);
+                else if (request.HttpMethod == "POST")
+                    HandlePostSnapshots(request, response);
+                else
+                    SendMethodNotAllowed(response);
+            }
             else if (path == "/api/v1/profile")
             {
                 if (request.HttpMethod == "GET")
@@ -436,7 +446,9 @@ public static partial class McpMod
             new() { ["method"] = "GET", ["path"] = "/api/v1/glossary/potions", ["description"] = "Read active-run potion pool metadata plus profile/save/run context" },
             new() { ["method"] = "GET", ["path"] = "/api/v1/glossary/keywords", ["description"] = "Read active-run keyword metadata plus profile/save/run context" },
             new() { ["method"] = "GET", ["path"] = "/api/v1/profiles", ["description"] = "List profile slots plus normalized save context" },
-            new() { ["method"] = "POST", ["path"] = "/api/v1/profiles", ["description"] = "Switch or delete profile slots" }
+            new() { ["method"] = "POST", ["path"] = "/api/v1/profiles", ["description"] = "Switch or delete profile slots" },
+            new() { ["method"] = "GET", ["path"] = "/api/v1/snapshots", ["description"] = "List current-run save snapshots created by STS2_MCP" },
+            new() { ["method"] = "POST", ["path"] = "/api/v1/snapshots", ["description"] = "Create or restore current-run save snapshots when enabled by environment" }
         };
     }
 
