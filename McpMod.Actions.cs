@@ -914,7 +914,9 @@ public static partial class McpMod
 
         int index = indexElem.GetInt32();
 
-        var holders = FindAll<NRelicBasicHolder>(screen);
+        var holders = FindAll<NRelicBasicHolder>(screen)
+            .Where(holder => holder.Relic?.Model != null && holder.IsEnabled && holder.Visible && holder.IsVisibleInTree())
+            .ToList();
         if (index < 0 || index >= holders.Count)
             return Error($"Relic index {index} out of range ({holders.Count} relics available)");
 
@@ -936,7 +938,7 @@ public static partial class McpMod
             return Error("No relic selection screen is open");
 
         var skipButton = screen.GetNodeOrNull<NClickableControl>("SkipButton");
-        if (skipButton is not { IsEnabled: true })
+        if (skipButton is not { IsEnabled: true, Visible: true } || !skipButton.IsVisibleInTree())
             return Error("No skip option available");
 
         skipButton.ForceClick();

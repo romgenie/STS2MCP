@@ -196,8 +196,8 @@ When a run is active, the response includes `current_run.run_id` in `{save_scope
 
 | Action | Parameters | When to Use |
 |---|---|---|
-| `select_relic` | `index`: int | Pick a relic (immediate). |
-| `skip_relic_selection` | _(none)_ | Skip the relic choice. |
+| `select_relic` | `index`: int | Pick a visible enabled relic (immediate). |
+| `skip_relic_selection` | _(none)_ | Skip the relic choice when the skip button is visible and enabled. |
 
 ### Crystal Sphere (`crystal_sphere`)
 

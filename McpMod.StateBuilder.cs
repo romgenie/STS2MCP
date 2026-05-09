@@ -2290,7 +2290,9 @@ public static partial class McpMod
 
         state["prompt"] = "Choose a relic.";
 
-        var relicHolders = FindAll<NRelicBasicHolder>(screen);
+        var relicHolders = FindAll<NRelicBasicHolder>(screen)
+            .Where(holder => holder.Relic?.Model != null && holder.IsEnabled && holder.Visible && holder.IsVisibleInTree())
+            .ToList();
         var relics = new List<Dictionary<string, object?>>();
         int index = 0;
         foreach (var holder in relicHolders)
@@ -2305,6 +2307,8 @@ public static partial class McpMod
                 ["name"] = SafeGetText(() => relic.Title),
                 ["description"] = SafeGetText(() => relic.DynamicDescription),
                 ["rarity"] = relic.Rarity.ToString(),
+                ["is_visible"] = true,
+                ["can_select"] = holder.IsEnabled,
                 ["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic)
             });
             index++;
@@ -2312,7 +2316,7 @@ public static partial class McpMod
         state["relics"] = relics;
 
         var skipButton = screen.GetNodeOrNull<NClickableControl>("SkipButton");
-        state["can_skip"] = skipButton?.IsEnabled == true && skipButton.Visible;
+        state["can_skip"] = skipButton?.IsEnabled == true && skipButton.Visible && skipButton.IsVisibleInTree();
 
         return state;
     }

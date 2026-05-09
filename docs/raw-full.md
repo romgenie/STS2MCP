@@ -875,6 +875,8 @@ Boss relic selection. Pick is immediate.
         "name": "Black Star",
         "description": "Elites drop an additional relic.",
         "rarity": "Rare",
+        "is_visible": true,
+        "can_select": true,
         "keywords": [ /* Keyword Objects */ ]
       }
     ],

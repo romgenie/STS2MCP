@@ -453,6 +453,29 @@ def audit_state_surface(repo: Path) -> None:
         if required_fragment not in rest_action_body:
             fail(f"rest option action missing visibility/enabled guard: {required_fragment}")
 
+    relic_state_match = re.search(
+        r"private static Dictionary<string, object\?> BuildRelicSelectState\(.*?\n    private static Dictionary<string, object\?> BuildCrystalSphereState\(",
+        state_builder,
+        re.S,
+    )
+    if not relic_state_match:
+        fail("could not locate BuildRelicSelectState for relic-select audit")
+    relic_state_body = relic_state_match.group(0)
+    relic_action_match = re.search(
+        r"private static Dictionary<string, object\?> ExecuteSelectRelic\(.*?\n    private static Dictionary<string, object\?> ExecuteClaimTreasureRelic\(",
+        actions,
+        re.S,
+    )
+    if not relic_action_match:
+        fail("could not locate relic selection actions for relic-select audit")
+    relic_action_body = relic_action_match.group(0)
+    for required_fragment in ["IsVisibleInTree", "is_visible", "can_select"]:
+        if required_fragment not in relic_state_body:
+            fail(f"relic_select state missing visibility/enabled metadata: {required_fragment}")
+    for required_fragment in ["IsVisibleInTree", "IsEnabled"]:
+        if required_fragment not in relic_action_body:
+            fail(f"relic_select action missing visibility/enabled guard: {required_fragment}")
+
     print(f"states: {len(state_types)} documented, markdown coverage enforced")
 
 

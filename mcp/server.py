@@ -802,6 +802,7 @@ async def relic_select(relic_index: int) -> str:
     """[Relic Selection] Select a relic from the relic selection screen.
 
     Used when the game offers a choice of relics (e.g., boss relic rewards).
+    Only visible enabled relic choices are actionable.
 
     Args:
         relic_index: 0-based index of the relic (as shown in game state).
@@ -814,7 +815,7 @@ async def relic_select(relic_index: int) -> str:
 
 @mcp.tool()
 async def relic_skip() -> str:
-    """[Relic Selection] Skip the relic selection without choosing a relic."""
+    """[Relic Selection] Skip when the skip button is visible and enabled."""
     try:
         return await _post({"action": "skip_relic_selection"})
     except Exception as e:
@@ -1194,6 +1195,8 @@ async def mp_combat_confirm_selection() -> str:
 async def mp_relic_select(relic_index: int) -> str:
     """[Multiplayer Relic Selection] Select a relic (boss relic rewards).
 
+    Only visible enabled relic choices are actionable.
+
     Args:
         relic_index: 0-based index of the relic.
     """
@@ -1205,7 +1208,7 @@ async def mp_relic_select(relic_index: int) -> str:
 
 @mcp.tool()
 async def mp_relic_skip() -> str:
-    """[Multiplayer Relic Selection] Skip the relic selection."""
+    """[Multiplayer Relic Selection] Skip when the skip button is visible and enabled."""
     try:
         return await _mp_post({"action": "skip_relic_selection"})
     except Exception as e:
