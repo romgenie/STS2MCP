@@ -24,49 +24,7 @@ public static partial class McpMod
     {
         try
         {
-            var dataTask = RunOnMainThread(() =>
-            {
-                var sm = SaveManager.Instance;
-                var settings = sm.SettingsSave;
-                var prefs = sm.PrefsSave;
-
-                return new Dictionary<string, object?>
-                {
-                    ["display"] = new Dictionary<string, object?>
-                    {
-                        ["fullscreen"] = settings.Fullscreen,
-                        ["resolution"] = $"{settings.WindowSize.X}x{settings.WindowSize.Y}",
-                        ["fps_limit"] = settings.FpsLimit,
-                        ["vsync"] = settings.VSync.ToString(),
-                        ["msaa"] = settings.Msaa,
-                        ["aspect_ratio"] = settings.AspectRatioSetting.ToString(),
-                        ["target_display"] = settings.TargetDisplay,
-                        ["limit_fps_background"] = settings.LimitFpsInBackground,
-                    },
-                    ["audio"] = new Dictionary<string, object?>
-                    {
-                        ["master"] = settings.VolumeMaster,
-                        ["bgm"] = settings.VolumeBgm,
-                        ["sfx"] = settings.VolumeSfx,
-                        ["ambience"] = settings.VolumeAmbience,
-                    },
-                    ["gameplay"] = new Dictionary<string, object?>
-                    {
-                        ["fast_mode"] = prefs.FastMode.ToString(),
-                        ["screen_shake"] = prefs.ScreenShakeOptionIndex,
-                        ["show_run_timer"] = prefs.ShowRunTimer,
-                        ["show_card_indices"] = prefs.ShowCardIndices,
-                        ["text_effects"] = prefs.TextEffectsEnabled,
-                        ["long_press"] = prefs.IsLongPressEnabled,
-                    },
-                    ["mods"] = new Dictionary<string, object?>
-                    {
-                        ["enabled"] = settings.ModSettings?.PlayerAgreedToModLoading ?? false,
-                    },
-                    ["language"] = settings.Language,
-                    ["skip_intro"] = settings.SkipIntroLogo,
-                };
-            });
+            var dataTask = RunOnMainThread(BuildSettings);
 
             SendJson(response, dataTask.GetAwaiter().GetResult());
         }
@@ -74,6 +32,57 @@ public static partial class McpMod
         {
             SendError(response, 500, $"Failed to read settings: {ex.Message}");
         }
+    }
+
+    internal static object BuildSettings()
+    {
+        var sm = SaveManager.Instance;
+        if (sm == null)
+            return Error("Save manager is not available");
+
+        var settings = sm.SettingsSave;
+        var prefs = sm.PrefsSave;
+        if (settings == null || prefs == null)
+            return Error("Settings data is not available");
+
+        return new Dictionary<string, object?>
+        {
+            ["status"] = "ok",
+            ["kind"] = "settings",
+            ["display"] = new Dictionary<string, object?>
+            {
+                ["fullscreen"] = settings.Fullscreen,
+                ["resolution"] = $"{settings.WindowSize.X}x{settings.WindowSize.Y}",
+                ["fps_limit"] = settings.FpsLimit,
+                ["vsync"] = settings.VSync.ToString(),
+                ["msaa"] = settings.Msaa,
+                ["aspect_ratio"] = settings.AspectRatioSetting.ToString(),
+                ["target_display"] = settings.TargetDisplay,
+                ["limit_fps_background"] = settings.LimitFpsInBackground,
+            },
+            ["audio"] = new Dictionary<string, object?>
+            {
+                ["master"] = settings.VolumeMaster,
+                ["bgm"] = settings.VolumeBgm,
+                ["sfx"] = settings.VolumeSfx,
+                ["ambience"] = settings.VolumeAmbience,
+            },
+            ["gameplay"] = new Dictionary<string, object?>
+            {
+                ["fast_mode"] = prefs.FastMode.ToString(),
+                ["screen_shake"] = prefs.ScreenShakeOptionIndex,
+                ["show_run_timer"] = prefs.ShowRunTimer,
+                ["show_card_indices"] = prefs.ShowCardIndices,
+                ["text_effects"] = prefs.TextEffectsEnabled,
+                ["long_press"] = prefs.IsLongPressEnabled,
+            },
+            ["mods"] = new Dictionary<string, object?>
+            {
+                ["enabled"] = settings.ModSettings?.PlayerAgreedToModLoading ?? false,
+            },
+            ["language"] = settings.Language,
+            ["skip_intro"] = settings.SkipIntroLogo,
+        };
     }
 
     private static void HandleGetBestiary(HttpListenerResponse response)

@@ -1006,7 +1006,7 @@ Profile endpoints are independent of the singleplayer and multiplayer run endpoi
 
 ### `GET /api/v1/settings`
 
-Returns current settings and preferences, including display, audio, gameplay, language, skip-intro, and mod-loading status.
+Returns current settings and preferences as a structured object with `status: "ok"`, `kind: "settings"`, display, audio, gameplay, language, skip-intro, and mod-loading status.
 
 ### `GET /api/v1/profile`
 

@@ -74,7 +74,7 @@ All POST requests use JSON body with `"action"` field. Action responses include 
 
 `GET /api/v1/profile` returns persistent progress for the active profile, including character stats, discoveries, achievements, epochs, and global run totals.
 
-`GET /api/v1/settings` returns display, audio, gameplay, language, and mod-loading preferences.
+`GET /api/v1/settings` returns `status: "ok"`, `kind: "settings"`, display, audio, gameplay, language, and mod-loading preferences.
 
 `GET /api/v1/bestiary` returns deterministic reflected monster and encounter metadata with `status`, `kind`, `monster_count`, `encounter_count`, `monsters`, and `encounters`. Profile-specific fight stats are also summarized under `/api/v1/compendium`.
 

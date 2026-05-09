@@ -309,8 +309,8 @@ async def get_compendium() -> str:
 async def get_settings() -> str:
     """Get current game settings and preferences.
 
-    Includes display, audio, gameplay preferences, language, and mod-loading
-    status as exposed by the STS2_MCP HTTP settings endpoint.
+    Includes status/kind, display, audio, gameplay preferences, language, and
+    mod-loading status as exposed by the STS2_MCP HTTP settings endpoint.
     """
     try:
         return await _settings_get()

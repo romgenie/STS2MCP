@@ -179,6 +179,18 @@ def audit_static_error_shapes(repo: Path) -> None:
 
     if raw_error_writes:
         fail(f"500 handlers should use SendError for structured error bodies: {sorted(raw_error_writes)}")
+    fork_endpoints = (repo / "McpMod.ForkEndpoints.cs").read_text(encoding="utf-8")
+    settings_match = re.search(
+        r"internal static object BuildSettings\(\).*?\n    private static void HandleGetBestiary",
+        fork_endpoints,
+        re.S,
+    )
+    if not settings_match:
+        fail("could not locate BuildSettings for settings audit")
+    settings_body = settings_match.group(0)
+    for required_fragment in ["SaveManager.Instance", "Save manager is not available", "Settings data is not available", "status", "kind"]:
+        if required_fragment not in settings_body:
+            fail(f"settings endpoint missing startup-safe structured field: {required_fragment}")
     print("errors: structured 500 response helpers enforced")
 
 
@@ -906,6 +918,12 @@ def audit_live(base_url: str) -> None:
 
         if path in {"/api/v1/settings", "/api/v1/profile", "/api/v1/compendium", "/api/v1/bestiary", "/api/v1/profiles"} and status != 200:
             fail(f"{path} expected HTTP 200, got {status}: {data}")
+        if path == "/api/v1/settings":
+            if not isinstance(data, dict) or data.get("status") != "ok" or data.get("kind") != "settings":
+                fail(f"{path} expected structured settings status/kind, got {data}")
+            for required_field in ["display", "audio", "gameplay", "mods", "language", "skip_intro"]:
+                if required_field not in data:
+                    fail(f"{path} missing settings field: {required_field}")
         if path in {"/api/v1/profile", "/api/v1/compendium"}:
             if not isinstance(data, dict):
                 fail(f"{path} expected structured profile context object, got {type(data).__name__}")
