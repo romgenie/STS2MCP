@@ -323,7 +323,9 @@ async def get_bestiary() -> str:
     """Get reflected monster and encounter metadata.
 
     This is model/reference metadata and is separate from Compendium profile
-    encounter stats. The in-game Bestiary card is currently marked locked/future.
+    encounter stats. The response includes status/kind, monster and encounter
+    counts, and deterministic monster/encounter arrays. The in-game Bestiary
+    card is currently marked locked/future.
     """
     try:
         return await _bestiary_get()

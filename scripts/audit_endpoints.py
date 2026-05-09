@@ -912,6 +912,19 @@ def audit_live(base_url: str) -> None:
             for required_field in ["profile_id", "progress_path", "resolved_progress_path", "profile_root", "save_scope", "current_run"]:
                 if required_field not in data:
                     fail(f"{path} missing profile/save context field: {required_field}")
+        if path == "/api/v1/bestiary":
+            if not isinstance(data, dict) or data.get("status") != "ok" or data.get("kind") != "bestiary":
+                fail(f"{path} expected structured bestiary status/kind, got {data}")
+            monsters = data.get("monsters")
+            encounters = data.get("encounters")
+            if not isinstance(monsters, list) or data.get("monster_count") != len(monsters):
+                fail(f"{path} expected monsters list with matching monster_count, got {data}")
+            if not isinstance(encounters, list) or data.get("encounter_count") != len(encounters):
+                fail(f"{path} expected encounters list with matching encounter_count, got {data}")
+            monster_ids = [str(item.get("id")) for item in monsters if isinstance(item, dict)]
+            encounter_ids = [str(item.get("id")) for item in encounters if isinstance(item, dict)]
+            if monster_ids != sorted(monster_ids) or encounter_ids != sorted(encounter_ids):
+                fail(f"{path} expected deterministic id ordering")
 
         if path.startswith("/api/v1/glossary/") and status not in {200, 409}:
             fail(f"{path} expected HTTP 200 or 409, got {status}: {data}")

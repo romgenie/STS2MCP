@@ -10,7 +10,7 @@
 | `get_settings()` | General | Get current settings and preferences |
 | `get_profile()` | Profiles | Get active profile progress plus save/run context |
 | `get_compendium()` | Profiles | Get Compendium-shaped profile progress plus save/run context |
-| `get_bestiary()` | Profiles | Get monster and encounter metadata |
+| `get_bestiary()` | Profiles | Get deterministic monster and encounter metadata with counts |
 | `get_glossary_cards()` | Active Pool | Get active-run card pool metadata with run_id/seed scope |
 | `get_glossary_relics()` | Active Pool | Get active-run relic pool metadata with run_id/seed scope |
 | `get_glossary_potions()` | Active Pool | Get active-run potion pool metadata with run_id/seed scope |

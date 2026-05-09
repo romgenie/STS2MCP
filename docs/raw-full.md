@@ -1070,7 +1070,7 @@ Returns the active profile's progress grouped by the in-game Compendium cards:
 
 ### `GET /api/v1/bestiary`
 
-Returns reflected monster and encounter metadata. Profile-specific encounter and enemy fight stats are also summarized under `/api/v1/compendium`.
+Returns reflected monster and encounter metadata as a deterministic structured object with `status`, `kind`, `monster_count`, `encounter_count`, `monsters`, and `encounters`. Profile-specific encounter and enemy fight stats are also summarized under `/api/v1/compendium`.
 
 ### `GET /api/v1/glossary/*`
 

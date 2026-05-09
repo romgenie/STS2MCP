@@ -512,7 +512,6 @@ public static partial class McpMod
 
     internal static object BuildBestiary()
     {
-        var result = new Dictionary<string, object?>();
         var bindFlags = System.Reflection.BindingFlags.Public
             | System.Reflection.BindingFlags.NonPublic
             | System.Reflection.BindingFlags.Instance;
@@ -555,7 +554,6 @@ public static partial class McpMod
 
             monsters.Add(entry);
         }
-        result["monsters"] = monsters;
 
         var encounters = new List<Dictionary<string, object?>>();
         foreach (var type in typeof(EncounterModel).Assembly.GetTypes())
@@ -609,8 +607,23 @@ public static partial class McpMod
 
             encounters.Add(entry);
         }
-        result["encounters"] = encounters;
 
-        return result;
+        var orderedMonsters = monsters
+            .OrderBy(entry => entry.TryGetValue("id", out var id) ? id?.ToString() : "", StringComparer.Ordinal)
+            .ToList();
+        var orderedEncounters = encounters
+            .OrderBy(entry => entry.TryGetValue("id", out var id) ? id?.ToString() : "", StringComparer.Ordinal)
+            .ToList();
+
+        return new Dictionary<string, object?>
+        {
+            ["status"] = "ok",
+            ["kind"] = "bestiary",
+            ["source"] = "reflected MonsterModel and EncounterModel metadata",
+            ["monster_count"] = orderedMonsters.Count,
+            ["encounter_count"] = orderedEncounters.Count,
+            ["monsters"] = orderedMonsters,
+            ["encounters"] = orderedEncounters
+        };
     }
 }
