@@ -511,7 +511,7 @@ public static partial class McpMod
                 var seed = parsed.TryGetValue("seed", out var seedElem) ? seedElem.GetString() : null;
                 var resultTask = RunOnMainThread(() => ExecuteMenuSelect(option, seed));
                 var result = resultTask.GetAwaiter().GetResult();
-                SendJson(response, result);
+                SendActionResultJson(response, result);
             }
             catch (Exception ex)
             {
@@ -619,7 +619,7 @@ public static partial class McpMod
                 var seed = parsed.TryGetValue("seed", out var seedElem) ? seedElem.GetString() : null;
                 var resultTask = RunOnMainThread(() => ExecuteMenuSelect(option, seed));
                 var result = resultTask.GetAwaiter().GetResult();
-                SendJson(response, result);
+                SendActionResultJson(response, result);
             }
             catch (Exception ex)
             {
@@ -656,8 +656,8 @@ public static partial class McpMod
             {
                 response.StatusCode = (errorCode as string) switch
                 {
-                    "unknown_action" or "unknown_multiplayer_action" => 400,
-                    "run_not_in_progress" or "not_multiplayer_run" => 409,
+                    "missing_menu_option" or "unknown_menu_option" or "unknown_action" or "unknown_multiplayer_action" => 400,
+                    "not_on_menu" or "run_not_in_progress" or "not_multiplayer_run" => 409,
                     "local_player_unavailable" => 409,
                     _ => 400
                 };

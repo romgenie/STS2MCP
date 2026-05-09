@@ -223,6 +223,9 @@ def audit_static_error_shapes(repo: Path) -> None:
     for required_fragment in ["SendActionResultJson", "unknown_action", "run_not_in_progress", "local_player_unavailable"]:
         if required_fragment not in mcp_mod + actions:
             fail(f"singleplayer actions missing structured dispatch error handling: {required_fragment}")
+    for required_fragment in ["missing_menu_option", "unknown_menu_option", "not_on_menu"]:
+        if required_fragment not in mcp_mod + actions:
+            fail(f"menu_select missing structured dispatch error handling: {required_fragment}")
     for required_fragment in ["unknown_multiplayer_action", "not_multiplayer_run", "run_not_in_progress", "local_player_unavailable"]:
         if required_fragment not in mcp_mod + multiplayer_actions:
             fail(f"multiplayer actions missing structured dispatch error handling: {required_fragment}")
@@ -1099,7 +1102,9 @@ def audit_live(base_url: str) -> None:
         ("/api/v1/singleplayer", b"{", 400),
         ("/api/v1/singleplayer", b"{}", 400),
         ("/api/v1/singleplayer", b'{"action": 1}', 400),
+        ("/api/v1/singleplayer", b'{"action": "menu_select"}', 400),
         ("/api/v1/singleplayer", b'{"action": "menu_select", "option": 1}', 400),
+        ("/api/v1/singleplayer", b'{"action": "menu_select", "option": "definitely_not_real"}', 400),
         ("/api/v1/profiles", b"{", 400),
         ("/api/v1/profiles", b"{}", 400),
         ("/api/v1/profiles", b'{"action": 1}', 400),

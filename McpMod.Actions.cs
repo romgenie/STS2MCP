@@ -1122,7 +1122,7 @@ public static partial class McpMod
         option = option.Trim();
 
         if (string.IsNullOrEmpty(option))
-            return Error("Missing menu option");
+            return Error("Missing menu option", "missing_menu_option");
 
         var tree = (Engine.GetMainLoop()) as SceneTree;
         if (tree?.Root == null)
@@ -1431,12 +1431,12 @@ public static partial class McpMod
                 _ => null
             };
             if (menuFieldName == null)
-                return Error($"Unknown menu option: {option}");
+                return Error($"Unknown menu option: {option}", "unknown_menu_option");
 
             return ClickMenuButtonField(mainMenu, menuFieldName, $"Selected {option}", $"Option '{option}' is not available");
         }
 
-        return Error("Not on a menu screen");
+        return Error("Not on a menu screen", "not_on_menu");
     }
 
     private static Dictionary<string, object?> TimelineUnlocksNeedManualReveal(List<string> unrevealedEpochs)
