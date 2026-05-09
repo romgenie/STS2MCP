@@ -1418,6 +1418,20 @@ def audit_live(base_url: str) -> None:
                 if required_field not in data:
                     fail(f"{path} missing profile/save context field: {required_field}")
             if path == "/api/v1/profile":
+                for required_field in [
+                    "total_playtime",
+                    "total_unlocks",
+                    "current_score",
+                    "floors_climbed",
+                    "architect_damage",
+                    "total_wins",
+                    "total_losses",
+                    "fastest_victory",
+                    "best_win_streak",
+                    "number_of_runs",
+                ]:
+                    if required_field not in data:
+                        fail(f"{path} missing global profile total field: {required_field}")
                 for field in ["characters", "card_stats", "encounter_stats", "enemy_stats", "ancient_stats", "achievements", "epochs"]:
                     assert_sorted_objects(path, field, data.get(field), "id")
                 profile_field_contracts = {
@@ -1431,6 +1445,10 @@ def audit_live(base_url: str) -> None:
                 }
                 for field, required_fields in profile_field_contracts.items():
                     assert_objects_have_fields(path, field, data.get(field), required_fields)
+                for field in ["encounter_stats", "enemy_stats", "ancient_stats"]:
+                    for item in data.get(field, []):
+                        if isinstance(item, dict) and item.get("by_character") is not None:
+                            assert_objects_have_fields(path, f"{field}.by_character", item["by_character"], ["character", "wins", "losses"])
                 for field in ["discovered_cards", "discovered_relics", "discovered_potions", "discovered_events", "discovered_acts"]:
                     assert_sorted_strings(path, field, data.get(field))
             if path == "/api/v1/compendium":
@@ -1445,6 +1463,20 @@ def audit_live(base_url: str) -> None:
                 run_history = sections.get("run_history")
                 if not all(isinstance(section, dict) for section in [card_library, relic_collection, potion_lab, bestiary, character_stats, run_history]):
                     fail(f"{path} expected structured compendium sections, got {sections}")
+                section_contracts = {
+                    "card_library": ["ui_label", "status", "source", "detail_endpoint", "detail_endpoint_requires_run", "discovered_ids", "stats"],
+                    "relic_collection": ["ui_label", "status", "source", "detail_endpoint", "detail_endpoint_requires_run", "discovered_ids", "limitation"],
+                    "potion_lab": ["ui_label", "status", "source", "detail_endpoint", "detail_endpoint_requires_run", "discovered_ids", "limitation"],
+                    "bestiary": ["ui_label", "status", "source", "detail_endpoint", "encounter_stats", "enemy_stats", "limitation"],
+                    "character_stats": ["ui_label", "status", "source", "characters", "global"],
+                }
+                for section_name, required_fields in section_contracts.items():
+                    section = sections.get(section_name)
+                    if not isinstance(section, dict):
+                        fail(f"{path} expected {section_name} section object, got {section}")
+                    for required_field in required_fields:
+                        if required_field not in section:
+                            fail(f"{path} {section_name} missing field {required_field}: {section}")
                 assert_sorted_strings(path, "card_library.discovered_ids", card_library.get("discovered_ids"))
                 assert_sorted_objects(path, "card_library.stats", card_library.get("stats"), "id")
                 assert_sorted_strings(path, "relic_collection.discovered_ids", relic_collection.get("discovered_ids"))
@@ -1452,6 +1484,30 @@ def audit_live(base_url: str) -> None:
                 assert_sorted_objects(path, "bestiary.encounter_stats", bestiary.get("encounter_stats"), "id")
                 assert_sorted_objects(path, "bestiary.enemy_stats", bestiary.get("enemy_stats"), "id")
                 assert_sorted_objects(path, "character_stats.characters", character_stats.get("characters"), "id")
+                assert_objects_have_fields(path, "card_library.stats", card_library.get("stats"), ["id", "times_picked", "times_skipped", "times_won", "times_lost"])
+                assert_objects_have_fields(path, "character_stats.characters", character_stats.get("characters"), ["id", "max_ascension", "preferred_ascension", "total_wins", "total_losses", "fastest_win_time", "best_win_streak", "current_win_streak", "playtime"])
+                for field in ["encounter_stats", "enemy_stats"]:
+                    assert_objects_have_fields(path, f"bestiary.{field}", bestiary.get(field), ["id", "total_wins", "total_losses"])
+                    for item in bestiary.get(field, []):
+                        if isinstance(item, dict) and item.get("by_character") is not None:
+                            assert_objects_have_fields(path, f"bestiary.{field}.by_character", item["by_character"], ["character", "wins", "losses"])
+                global_stats = character_stats.get("global")
+                if not isinstance(global_stats, dict):
+                    fail(f"{path} character_stats.global expected object, got {global_stats}")
+                for required_field in [
+                    "total_playtime",
+                    "total_unlocks",
+                    "current_score",
+                    "floors_climbed",
+                    "architect_damage",
+                    "total_wins",
+                    "total_losses",
+                    "fastest_victory",
+                    "best_win_streak",
+                    "number_of_runs",
+                ]:
+                    if required_field not in global_stats:
+                        fail(f"{path} character_stats.global missing field {required_field}: {global_stats}")
                 for required_field in ["ui_label", "status", "source", "entries", "limitation"]:
                     if required_field not in run_history:
                         fail(f"{path} run_history missing field {required_field}: {run_history}")
