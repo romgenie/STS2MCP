@@ -153,6 +153,34 @@ def audit_static_error_shapes(repo: Path) -> None:
     print("errors: structured 500 response helpers enforced")
 
 
+def audit_state_surface(repo: Path) -> None:
+    state_builder = (repo / "McpMod.StateBuilder.cs").read_text(encoding="utf-8")
+    formatting = (repo / "McpMod.Formatting.cs").read_text(encoding="utf-8")
+    docs = "\n".join(
+        [
+            (repo / "docs" / "raw-simplified.md").read_text(encoding="utf-8"),
+            (repo / "docs" / "raw-full.md").read_text(encoding="utf-8"),
+            (repo / "mcp" / "README.md").read_text(encoding="utf-8"),
+        ]
+    )
+
+    state_types = set(re.findall(r'\["state_type"\]\s*=\s*"([^"]+)"', state_builder))
+    missing_docs = sorted(state_type for state_type in state_types if state_type not in docs)
+    if missing_docs:
+        fail(f"state types missing docs: {missing_docs}")
+
+    formatter_refs = set()
+    for match in re.findall(r'TryGetValue\("([a-z_]+)"|stateType\s*==\s*"([a-z_]+)"', formatting):
+        formatter_refs.update(value for value in match if value)
+    covered_by_battle = {"monster", "elite", "boss"}
+    intentionally_unformatted = {"unknown"}
+    missing_formatters = sorted(state_types - formatter_refs - covered_by_battle - intentionally_unformatted)
+    if missing_formatters:
+        fail(f"state types missing markdown formatter coverage: {missing_formatters}")
+
+    print(f"states: {len(state_types)} documented, markdown coverage enforced")
+
+
 def audit_live(base_url: str) -> None:
     root_status, root = load_json_url(base_url.rstrip("/") + "/")
     if root_status != 200 or not isinstance(root, dict):
@@ -263,6 +291,7 @@ def main() -> None:
     audit_action_surface(repo)
     audit_static_formatters(repo)
     audit_static_error_shapes(repo)
+    audit_state_surface(repo)
     if not args.skip_live:
         audit_live(args.base_url)
 
