@@ -76,6 +76,49 @@ def audit_docs(repo: Path) -> None:
     print(f"docs: {len(documented)} endpoints documented")
 
 
+def extract_action_switches(source: str, marker: str) -> set[str]:
+    try:
+        section = source[source.index(marker):]
+    except ValueError:
+        fail(f"could not find {marker}")
+
+    match = re.search(r"return action switch\s*\{(.*?)\n\s*_ =>", section, re.S)
+    if not match:
+        fail(f"could not parse action switch for {marker}")
+    return set(re.findall(r'"([a-z_]+)"\s*=>', match.group(1)))
+
+
+def audit_action_surface(repo: Path) -> None:
+    sp_actions = extract_action_switches((repo / "McpMod.Actions.cs").read_text(encoding="utf-8"), "ExecuteAction")
+    mp_actions = extract_action_switches((repo / "McpMod.MultiplayerActions.cs").read_text(encoding="utf-8"), "ExecuteMultiplayerAction")
+    server = (repo / "mcp" / "server.py").read_text(encoding="utf-8")
+    docs = "\n".join(
+        [
+            (repo / "docs" / "raw-simplified.md").read_text(encoding="utf-8"),
+            (repo / "docs" / "raw-full.md").read_text(encoding="utf-8"),
+            (repo / "mcp" / "README.md").read_text(encoding="utf-8"),
+        ]
+    )
+
+    mcp_posts = set(re.findall(r'"action"\s*:\s*"([a-z_]+)"', server))
+    doc_actions = set(re.findall(r"`([a-z_]+)`", docs))
+
+    missing_mcp = sorted((sp_actions | mp_actions) - mcp_posts)
+    if missing_mcp:
+        fail(f"implemented actions missing MCP wrappers: {missing_mcp}")
+
+    allowed_non_switch_posts = {"menu_select", "switch", "delete"}
+    extra_mcp = sorted(mcp_posts - sp_actions - mp_actions - allowed_non_switch_posts)
+    if extra_mcp:
+        fail(f"MCP posts unknown actions: {extra_mcp}")
+
+    missing_docs = sorted((sp_actions | mp_actions) - doc_actions)
+    if missing_docs:
+        fail(f"implemented actions missing docs: {missing_docs}")
+
+    print(f"actions: {len(sp_actions)} singleplayer, {len(mp_actions)} multiplayer actions covered")
+
+
 def audit_live(base_url: str) -> None:
     root_status, root = load_json_url(base_url.rstrip("/") + "/")
     if root_status != 200 or not isinstance(root, dict):
@@ -136,6 +179,7 @@ def main() -> None:
 
     repo = Path(__file__).resolve().parents[1]
     audit_docs(repo)
+    audit_action_surface(repo)
     if not args.skip_live:
         audit_live(args.base_url)
 
