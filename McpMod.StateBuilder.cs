@@ -1483,6 +1483,7 @@ public static partial class McpMod
                 item["relic_id"] = relic.Id.Entry;
                 item["relic_name"] = SafeGetText(() => relic.Title);
                 item["relic_description"] = SafeGetText(() => relic.DynamicDescription);
+                item["relic_rarity"] = relic.Rarity.ToString();
                 item["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic);
             }
             items.Add(item);
@@ -1581,6 +1582,7 @@ public static partial class McpMod
                 item["relic_id"] = relic.Id.Entry;
                 item["relic_name"] = SafeGetText(() => relic.Title);
                 item["relic_description"] = SafeGetText(() => relic.DynamicDescription);
+                item["relic_rarity"] = relic.Rarity.ToString();
                 item["keywords"] = BuildHoverTips(relic.HoverTipsExcludingRelic);
             }
             items.Add(item);
@@ -1603,6 +1605,9 @@ public static partial class McpMod
                 item["potion_id"] = potion.Id.Entry;
                 item["potion_name"] = SafeGetText(() => potion.Title);
                 item["potion_description"] = SafeGetText(() => potion.DynamicDescription);
+                item["potion_rarity"] = potion.Rarity.ToString();
+                item["potion_target_type"] = potion.TargetType.ToString();
+                item["potion_usage"] = potion.Usage.ToString();
                 item["keywords"] = BuildHoverTips(potion.ExtraHoverTips);
             }
             items.Add(item);

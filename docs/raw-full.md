@@ -620,6 +620,7 @@ Shop inventory is auto-opened when state is queried.
         "relic_id": "VAJRA",
         "relic_name": "Vajra",
         "relic_description": "At the start of each combat, gain 1 Strength.",
+        "relic_rarity": "Common",
         "keywords": [ /* Keyword Objects */ ]
       },
       // Potion entry
@@ -632,6 +633,9 @@ Shop inventory is auto-opened when state is queried.
         "potion_id": "FIRE_POTION",
         "potion_name": "Fire Potion",
         "potion_description": "Deal 20 damage to target enemy.",
+        "potion_rarity": "Common",
+        "potion_target_type": "Enemy",
+        "potion_usage": "Manual",
         "keywords": [ /* Keyword Objects */ ]
       },
       // Card removal entry
@@ -673,6 +677,7 @@ A relic-only shop disguised as an event. Uses `shop_purchase` and `proceed` acti
           "relic_id": "VAJRA",
           "relic_name": "Vajra",
           "relic_description": "At the start of each combat, gain 1 Strength.",
+          "relic_rarity": "Common",
           "keywords": [ /* Keyword Objects */ ]
         }
       ],
