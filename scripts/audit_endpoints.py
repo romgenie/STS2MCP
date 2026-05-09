@@ -325,6 +325,19 @@ def audit_static_save_roots(repo: Path) -> None:
         fail("save-root fallback must search all Steam account roots after the active account")
     if "Directory.GetDirectories(steamRoot)" not in body:
         fail("save-root fallback must enumerate Steam account directories")
+
+    compendium_response_match = re.search(
+        r"private static object BuildCompendiumResponse\(.*?\n    private sealed class CompendiumSnapshot",
+        compendium,
+        re.S,
+    )
+    if not compendium_response_match:
+        fail("could not locate BuildCompendiumResponse for profile context audit")
+    compendium_response = compendium_response_match.group(0)
+    for required_fragment in ["profile_id", "progress_path", "profile_root", "save_scope", "current_run"]:
+        if required_fragment not in compendium_response:
+            fail(f"compendium endpoint missing profile/save context: {required_fragment}")
+
     profile_match = re.search(
         r"internal static object BuildProfile\(\).*?\n    \}",
         profile,
@@ -336,7 +349,7 @@ def audit_static_save_roots(repo: Path) -> None:
     for required_fragment in ["profile_id", "progress_path", "profile_root", "save_scope", "current_run", "BuildActiveRunContext"]:
         if required_fragment not in profile_body:
             fail(f"profile endpoint missing identity/run context: {required_fragment}")
-    print("saves: multi-account fallback and profile context enforced")
+    print("saves: multi-account fallback and profile/compendium context enforced")
 
 
 def audit_state_surface(repo: Path) -> None:
@@ -852,6 +865,12 @@ def audit_live(base_url: str) -> None:
 
         if path in {"/api/v1/settings", "/api/v1/profile", "/api/v1/compendium", "/api/v1/bestiary", "/api/v1/profiles"} and status != 200:
             fail(f"{path} expected HTTP 200, got {status}: {data}")
+        if path in {"/api/v1/profile", "/api/v1/compendium"}:
+            if not isinstance(data, dict):
+                fail(f"{path} expected structured profile context object, got {type(data).__name__}")
+            for required_field in ["profile_id", "progress_path", "profile_root", "save_scope", "current_run"]:
+                if required_field not in data:
+                    fail(f"{path} missing profile/save context field: {required_field}")
 
         if path.startswith("/api/v1/glossary/") and status not in {200, 409}:
             fail(f"{path} expected HTTP 200 or 409, got {status}: {data}")

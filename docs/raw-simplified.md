@@ -82,6 +82,8 @@ The `/api/v1/glossary/*` endpoints expose active-run pool metadata. They require
 
 `GET /api/v1/compendium` returns the active profile grouped like the in-game Compendium:
 
+The top level includes `profile_id`, `progress_path`, `profile_root`, and `save_scope`, matching `/api/v1/profile`.
+
 When a run is active, the response includes `current_run.run_id` in `{save_scope}:profile{profile_id}:{start_time}` format. This identifies the specific run attempt, while `seed` identifies the generated run content.
 
 | Section | Status |

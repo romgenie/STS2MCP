@@ -1016,6 +1016,7 @@ Returns the active profile's persistent progress summary, including `profile_id`
 
 Returns the active profile's progress grouped by the in-game Compendium cards:
 
+- `profile_id`, `progress_path`, `profile_root`, `save_scope`: active profile and save-location context, matching `/api/v1/profile`.
 - `current_run`: present while a run is active. Includes a derived `run_id` in `{save_scope}:profile{profile_id}:{start_time}` format, plus `start_time`, `seed`, `save_time`, `run_time`, and run metadata read from `current_run.save`.
 - `card_library`: discovered card IDs and card pick/skip/win/loss stats. Detailed card metadata lives at `/api/v1/glossary/cards`, which currently requires a run context.
 - `relic_collection`: discovered relic IDs. Detailed relic metadata lives at `/api/v1/glossary/relics`, which currently requires a run context.
@@ -1027,6 +1028,9 @@ Returns the active profile's progress grouped by the in-game Compendium cards:
 ```jsonc
 {
   "profile_id": 1,
+  "progress_path": "modded/profile1\\saves\\progress.save",
+  "profile_root": "modded/profile1",
+  "save_scope": "modded",
   "current_run": {
     "is_in_progress": true,
     "profile_id": 1,

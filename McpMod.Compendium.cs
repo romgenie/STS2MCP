@@ -112,6 +112,9 @@ public static partial class McpMod
         return new Dictionary<string, object?>
         {
             ["profile_id"] = snapshot.ProfileId,
+            ["progress_path"] = snapshot.ProgressPath,
+            ["profile_root"] = snapshot.ProfileRoot,
+            ["save_scope"] = snapshot.SaveScope,
             ["current_run"] = BuildCurrentRunContext(snapshot),
             ["source"] = "SaveManager.Progress plus model metadata endpoints",
             ["sections"] = new Dictionary<string, object?>
