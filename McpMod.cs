@@ -661,7 +661,7 @@ public static partial class McpMod
                 response.StatusCode = (errorCode as string) switch
                 {
                     "missing_menu_option" or "unknown_menu_option" or "unknown_action" or "unknown_multiplayer_action" => 400,
-                    "not_on_menu" or "run_not_in_progress" or "not_multiplayer_run" => 409,
+                    "not_on_menu" or "run_not_in_progress" or "not_multiplayer_run" or "blocking_popup_active" => 409,
                     "local_player_unavailable" => 409,
                     _ => 400
                 };

@@ -56,7 +56,7 @@ public static partial class McpMod
 
         var tree = (Godot.Engine.GetMainLoop()) as SceneTree;
         if (tree?.Root != null && IsAnyFtueVisible(tree.Root))
-            return Error("Blocking popup active. Use menu_select with one of the advertised popup options before gameplay actions.");
+            return Error("Blocking popup active. Use menu_select with one of the advertised popup options before gameplay actions.", "blocking_popup_active");
 
         return action switch
         {

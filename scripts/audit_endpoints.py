@@ -249,7 +249,7 @@ def audit_static_error_shapes(repo: Path) -> None:
             fail(f"state endpoints missing format validation: {required_fragment}")
     actions = (repo / "McpMod.Actions.cs").read_text(encoding="utf-8")
     multiplayer_actions = (repo / "McpMod.MultiplayerActions.cs").read_text(encoding="utf-8")
-    for required_fragment in ["SendActionResultJson", "unknown_action", "run_not_in_progress", "local_player_unavailable"]:
+    for required_fragment in ["SendActionResultJson", "unknown_action", "run_not_in_progress", "local_player_unavailable", "blocking_popup_active"]:
         if required_fragment not in mcp_mod + actions:
             fail(f"singleplayer actions missing structured dispatch error handling: {required_fragment}")
     if "response.StatusCode = 400;" not in mcp_mod:
@@ -257,7 +257,7 @@ def audit_static_error_shapes(repo: Path) -> None:
     for required_fragment in ["missing_menu_option", "unknown_menu_option", "not_on_menu"]:
         if required_fragment not in mcp_mod + actions:
             fail(f"menu_select missing structured dispatch error handling: {required_fragment}")
-    for required_fragment in ["unknown_multiplayer_action", "not_multiplayer_run", "run_not_in_progress", "local_player_unavailable"]:
+    for required_fragment in ["unknown_multiplayer_action", "not_multiplayer_run", "run_not_in_progress", "local_player_unavailable", "blocking_popup_active"]:
         if required_fragment not in mcp_mod + multiplayer_actions:
             fail(f"multiplayer actions missing structured dispatch error handling: {required_fragment}")
     mcp_server = (repo / "mcp" / "server.py").read_text(encoding="utf-8")
@@ -267,6 +267,15 @@ def audit_static_error_shapes(repo: Path) -> None:
     mcp_readme = (repo / "mcp" / "README.md").read_text(encoding="utf-8")
     if "MCP wrappers preserve those structured JSON error bodies" not in mcp_readme:
         fail("mcp/README.md must document structured non-2xx error propagation")
+    docs = "\n".join(
+        [
+            (repo / "docs" / "raw-simplified.md").read_text(encoding="utf-8"),
+            (repo / "docs" / "raw-full.md").read_text(encoding="utf-8"),
+            mcp_readme,
+        ]
+    )
+    if "blocking_popup_active" not in docs:
+        fail("docs must describe blocking popup action errors")
     print("errors: structured 500 response helpers enforced")
 
 
