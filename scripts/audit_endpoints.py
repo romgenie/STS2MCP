@@ -1427,10 +1427,35 @@ def audit_live(base_url: str) -> None:
         fail("root response does not include endpoints list")
     if root.get("status") != "ok" or root.get("kind") != "api_index":
         fail(f"root response expected status ok and kind api_index, got {root}")
-    if not root.get("version"):
-        fail(f"root response expected explicit version field, got {root}")
+    if not isinstance(root.get("message"), str) or "STS2 MCP" not in root["message"]:
+        fail(f"root response expected STS2 MCP message, got {root.get('message')!r}")
+    if not isinstance(root.get("version"), str) or not re.match(r"^\d+\.\d+\.\d+$", root["version"]):
+        fail(f"root response expected semantic version string, got {root.get('version')!r}")
+    bound_prefixes = root.get("bound_prefixes")
+    if not isinstance(bound_prefixes, list) or not bound_prefixes:
+        fail(f"root response expected non-empty bound_prefixes list, got {bound_prefixes}")
+    for prefix in bound_prefixes:
+        if not isinstance(prefix, str) or not prefix.startswith("http://") or not prefix.endswith("/"):
+            fail(f"root response bound prefix should be an http URL string ending in slash, got {prefix!r}")
     if root.get("endpoint_count") != len(endpoint_rows):
         fail(f"root response endpoint_count mismatch, got {root.get('endpoint_count')} for {len(endpoint_rows)} endpoints")
+    seen_rows: set[tuple[str, str]] = set()
+    for row in endpoint_rows:
+        if not isinstance(row, dict):
+            fail(f"root endpoint row expected object, got {row}")
+        method = row.get("method")
+        path = row.get("path")
+        description = row.get("description")
+        if method not in {"GET", "POST"}:
+            fail(f"root endpoint row has invalid method: {row}")
+        if not isinstance(path, str) or not path.startswith("/api/v1/"):
+            fail(f"root endpoint row has invalid path: {row}")
+        if not isinstance(description, str) or not description.strip():
+            fail(f"root endpoint row missing non-empty description: {row}")
+        row_key = (method, path)
+        if row_key in seen_rows:
+            fail(f"root endpoint row duplicated: {row}")
+        seen_rows.add(row_key)
 
     live_index = {
         (str(row.get("method")), str(row.get("path")))
