@@ -25,7 +25,7 @@ public static partial class McpMod
         {
             var snapshotTask = RunOnMainThread(BuildCompendiumSnapshot);
             var snapshot = snapshotTask.GetAwaiter().GetResult();
-            SendJson(response, BuildCompendiumResponse(snapshot));
+            SendReadResultJson(response, BuildCompendiumResponse(snapshot));
         }
         catch (Exception ex)
         {
@@ -43,7 +43,7 @@ public static partial class McpMod
         var progress = SaveManager.Instance?.Progress;
         var saveManager = SaveManager.Instance;
         if (progress == null || saveManager == null)
-            return new CompendiumSnapshot { Error = "No profile data available." };
+            return new CompendiumSnapshot { Error = "No profile data available.", ErrorCode = "profile_data_unavailable" };
 
         var profileId = saveManager.CurrentProfileId;
         var progressPath = GetProfileProgressPath(profileId);
@@ -111,7 +111,7 @@ public static partial class McpMod
     private static object BuildCompendiumResponse(CompendiumSnapshot snapshot)
     {
         if (snapshot.Error != null)
-            return Error(snapshot.Error);
+            return Error(snapshot.Error, snapshot.ErrorCode);
 
         var runHistory = BuildRunHistorySection(snapshot);
 
@@ -184,6 +184,7 @@ public static partial class McpMod
     private sealed class CompendiumSnapshot
     {
         public string? Error { get; init; }
+        public string? ErrorCode { get; init; }
         public int ProfileId { get; init; }
         public string? ProgressPath { get; init; }
         public string? ResolvedProgressPath { get; init; }

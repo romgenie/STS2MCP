@@ -247,6 +247,10 @@ def audit_static_error_shapes(repo: Path) -> None:
     for required_fragment in ["TryValidateStateFormat", "invalid_format", 'format is "json" or "markdown"']:
         if required_fragment not in mcp_mod:
             fail(f"state endpoints missing format validation: {required_fragment}")
+    helpers = (repo / "McpMod.Helpers.cs").read_text(encoding="utf-8")
+    for required_fragment in ["SendReadResultJson", "save_manager_unavailable", "settings_data_unavailable", "profile_data_unavailable"]:
+        if required_fragment not in helpers + fork_endpoints + (repo / "McpMod.Profile.cs").read_text(encoding="utf-8") + (repo / "McpMod.Compendium.cs").read_text(encoding="utf-8"):
+            fail(f"read endpoints missing structured availability error handling: {required_fragment}")
     for required_fragment in ["SendMethodNotAllowed", "method_not_allowed", "SendNotFound", "not_found", "internal_error"]:
         if required_fragment not in mcp_mod:
             fail(f"route errors missing structured error code: {required_fragment}")
@@ -294,6 +298,9 @@ def audit_static_error_shapes(repo: Path) -> None:
     for required_fragment in ["method_not_allowed", "not_found", "internal_error"]:
         if required_fragment not in docs:
             fail(f"docs must describe route-level error code: {required_fragment}")
+    for required_fragment in ["save_manager_unavailable", "settings_data_unavailable", "profile_data_unavailable"]:
+        if required_fragment not in docs:
+            fail(f"docs must describe read endpoint availability error code: {required_fragment}")
     for required_fragment in validation_codes:
         if required_fragment not in docs:
             fail(f"docs must describe POST validation error code: {required_fragment}")

@@ -21,6 +21,7 @@ HTTP API served by the STS2_MCP mod on `localhost:15526`. No authentication. Loc
 HTTP error responses include `status: "error"` and `error`. Some route-specific errors also include `error_code`.
 Route-level failures include `error_code: "method_not_allowed"` for unsupported HTTP methods, `error_code: "not_found"` for unknown paths, and `error_code: "internal_error"` for unexpected top-level handler failures.
 POST validation failures use stable `error_code` values where possible, including `invalid_json`, `missing_action`, `invalid_action_type`, `missing_profile_id`, `invalid_profile_id_type`, and `invalid_action_payload`.
+Read endpoint startup/data-availability failures use non-2xx structured errors where possible, including `save_manager_unavailable`, `settings_data_unavailable`, and `profile_data_unavailable`.
 
 `GET /` returns the API index with `status: "ok"`, `kind: "api_index"`, `version`, `endpoint_count`, `bound_prefixes`, and the advertised endpoint list.
 

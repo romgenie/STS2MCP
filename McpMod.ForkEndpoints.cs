@@ -25,8 +25,7 @@ public static partial class McpMod
         try
         {
             var dataTask = RunOnMainThread(BuildSettings);
-
-            SendJson(response, dataTask.GetAwaiter().GetResult());
+            SendReadResultJson(response, dataTask.GetAwaiter().GetResult());
         }
         catch (Exception ex)
         {
@@ -38,12 +37,12 @@ public static partial class McpMod
     {
         var sm = SaveManager.Instance;
         if (sm == null)
-            return Error("Save manager is not available");
+            return Error("Save manager is not available", "save_manager_unavailable");
 
         var settings = sm.SettingsSave;
         var prefs = sm.PrefsSave;
         if (settings == null || prefs == null)
-            return Error("Settings data is not available");
+            return Error("Settings data is not available", "settings_data_unavailable");
 
         return new Dictionary<string, object?>
         {

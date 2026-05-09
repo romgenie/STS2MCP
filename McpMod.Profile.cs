@@ -20,7 +20,7 @@ public static partial class McpMod
         try
         {
             var dataTask = RunOnMainThread(BuildProfile);
-            SendJson(response, dataTask.GetAwaiter().GetResult());
+            SendReadResultJson(response, dataTask.GetAwaiter().GetResult());
         }
         catch (Exception ex)
         {
@@ -33,7 +33,7 @@ public static partial class McpMod
         try
         {
             var dataTask = RunOnMainThread(BuildProfilesSummary);
-            SendJson(response, dataTask.GetAwaiter().GetResult());
+            SendReadResultJson(response, dataTask.GetAwaiter().GetResult());
         }
         catch (Exception ex)
         {
@@ -119,7 +119,7 @@ public static partial class McpMod
     {
         var sm = SaveManager.Instance;
         if (sm == null)
-            return Error("Save manager is not available");
+            return Error("Save manager is not available", "save_manager_unavailable");
 
         var profiles = new List<Dictionary<string, object?>>();
         for (int i = 1; i <= 3; i++)
@@ -263,7 +263,7 @@ public static partial class McpMod
         var saveManager = SaveManager.Instance;
         var progress = saveManager?.Progress;
         if (saveManager == null || progress == null)
-            return Error("No profile data available.");
+            return Error("No profile data available.", "profile_data_unavailable");
 
         var result = new Dictionary<string, object?>();
         var profileId = saveManager.CurrentProfileId;
