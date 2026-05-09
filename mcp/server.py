@@ -226,6 +226,13 @@ async def menu_select(option: str, seed: str | None = None) -> str:
         body["seed"] = seed
     try:
         return await _post(body)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 409 and "Multiplayer run is active" in e.response.text:
+            try:
+                return await _mp_post(body)
+            except Exception as mp_e:
+                return _handle_error(mp_e)
+        return _handle_error(e)
     except Exception as e:
         return _handle_error(e)
 
