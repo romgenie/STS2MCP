@@ -512,6 +512,22 @@ def audit_static_glossary_scope(repo: Path) -> None:
         )
         if not match or 'SortDictionaryListByStringField(result, "id")' not in match.group(0):
             fail(f"{method} must return deterministically sorted item IDs")
+    glossary_item_helpers = {
+        "AddRelicsFromPool": ["id", "name", "description", "rarity", "pool", "keywords", "HoverTipsExcludingRelic"],
+        "AddPotionsFromPool": ["id", "name", "description", "rarity", "target_type", "usage", "pool", "keywords", "ExtraHoverTips"],
+    }
+    for helper_name, required_fragments in glossary_item_helpers.items():
+        match = re.search(
+            rf"private static void {helper_name}\(.*?(?=\n    internal static object|\n    private static|\n\}})",
+            fork_endpoints,
+            re.S,
+        )
+        if not match:
+            fail(f"could not locate {helper_name} for glossary item shape audit")
+        helper_body = match.group(0)
+        for required_fragment in required_fragments:
+            if required_fragment not in helper_body:
+                fail(f"{helper_name} missing glossary item field: {required_fragment}")
     keywords_match = re.search(
         r"internal static object BuildGlossaryKeywords\(\).*?\n    private static void AddKeywordTips",
         fork_endpoints,
@@ -1444,6 +1460,18 @@ def audit_live(base_url: str) -> None:
                 fail(f"{path} expected items list with matching count, got {data}")
             item_sort_key = "name" if expected_kind == "keywords" else "id"
             assert_sorted_objects(path, "items", data["items"], item_sort_key)
+            required_item_fields = {
+                "cards": ["id", "name", "type", "cost", "description", "rarity", "pool", "keywords", "is_upgraded", "is_upgradable", "current_upgrade_level", "max_upgrade_level", "upgrade_preview_type", "upgrade_preview_description"],
+                "relics": ["id", "name", "description", "rarity", "pool", "keywords"],
+                "potions": ["id", "name", "description", "rarity", "target_type", "usage", "pool", "keywords"],
+                "keywords": ["name", "description"],
+            }[expected_kind]
+            for item in data["items"]:
+                if not isinstance(item, dict):
+                    fail(f"{path} expected glossary items to be objects, got {item}")
+                for required_field in required_item_fields:
+                    if required_field not in item:
+                        fail(f"{path} glossary item missing field {required_field}: {item}")
             for required_field in ["profile_id", "progress_path", "resolved_progress_path", "profile_root", "save_scope"]:
                 if required_field not in data:
                     fail(f"{path} missing profile/save context field: {required_field}")
