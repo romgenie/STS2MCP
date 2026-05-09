@@ -98,8 +98,10 @@ public static partial class McpMod
             try
             {
                 var path = ProgressSaveManager.GetProgressPathForProfile(i);
-                profileData["has_data"] = File.Exists(path);
+                var resolvedPath = ResolveProfileProgressPath(i);
+                profileData["has_data"] = resolvedPath != null && File.Exists(resolvedPath);
                 profileData["path"] = path;
+                profileData["resolved_path"] = resolvedPath;
             }
             catch
             {
