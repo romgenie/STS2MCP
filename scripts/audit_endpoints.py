@@ -271,6 +271,8 @@ def audit_static_card_glossary_metadata(repo: Path) -> None:
         fail("could not locate BuildShopState for shop card metadata audit")
     shop_body = shop_match.group(0)
     shop_required = [
+        "inventory_open",
+        "can_close_inventory",
         "card_is_upgradable",
         "card_current_upgrade_level",
         "card_max_upgrade_level",
@@ -282,6 +284,8 @@ def audit_static_card_glossary_metadata(repo: Path) -> None:
     missing_shop = [field for field in shop_required if field not in shop_body]
     if missing_shop:
         fail(f"shop card serialization missing upgrade metadata: {missing_shop}")
+    if "proceedButton?.IsEnabled == true || canCloseInventory" not in shop_body:
+        fail("shop can_proceed must mirror ExecuteProceed close-inventory behavior")
     print("cards: upgrade metadata enforced for glossary and state payloads")
 
 

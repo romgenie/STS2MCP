@@ -619,7 +619,7 @@ Pick one card to add to your deck. Appears after claiming a card reward, or dire
 
 ### `shop` — Shop
 
-Shop inventory is auto-opened when state is queried.
+Shop inventory is auto-opened when state is queried. `can_proceed` mirrors the `proceed` action: it is true if the proceed button is already enabled, or if the inventory can be closed and then proceeded through in one action.
 
 ```jsonc
 {
@@ -688,6 +688,8 @@ Shop inventory is auto-opened when state is queried.
         "can_afford": true
       }
     ],
+    "inventory_open": true,
+    "can_close_inventory": true,
     "can_proceed": true,
     "error": "..."             // Only present if inventory isn't ready; retry in a moment
   },
@@ -722,6 +724,8 @@ A relic-only shop disguised as an event. Uses `shop_purchase` and `proceed` acti
           "keywords": [ /* Keyword Objects */ ]
         }
       ],
+      "inventory_open": true,
+      "can_close_inventory": true,
       "can_proceed": true
     },
     // After fight:

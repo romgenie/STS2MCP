@@ -1514,11 +1514,19 @@ public static partial class McpMod
         // Proceed button
         if (fakeMerchantNode != null)
         {
+            var inventoryUI = FindFirst<NMerchantInventory>(fakeMerchantNode);
+            var backButton = FindFirst<NBackButton>(fakeMerchantNode);
             var proceedButton = FindFirst<NProceedButton>(fakeMerchantNode);
-            shopState["can_proceed"] = proceedButton?.IsEnabled ?? false;
+            var inventoryOpen = inventoryUI?.IsOpen == true;
+            var canCloseInventory = inventoryOpen && backButton?.IsEnabled == true;
+            shopState["inventory_open"] = inventoryOpen;
+            shopState["can_close_inventory"] = canCloseInventory;
+            shopState["can_proceed"] = proceedButton?.IsEnabled == true || canCloseInventory;
         }
         else
         {
+            shopState["inventory_open"] = false;
+            shopState["can_close_inventory"] = false;
             shopState["can_proceed"] = false;
         }
 
@@ -1709,8 +1717,15 @@ public static partial class McpMod
 
         state["items"] = items;
 
-        var proceedButton = NMerchantRoom.Instance?.ProceedButton;
-        state["can_proceed"] = proceedButton?.IsEnabled ?? false;
+        var merchantRoomNode = NMerchantRoom.Instance;
+        var inventoryOpen = merchantRoomNode?.Inventory?.IsOpen == true;
+        var backButton = merchantRoomNode != null ? FindFirst<NBackButton>(merchantRoomNode) : null;
+        var canCloseInventory = inventoryOpen && backButton?.IsEnabled == true;
+        state["inventory_open"] = inventoryOpen;
+        state["can_close_inventory"] = canCloseInventory;
+
+        var proceedButton = merchantRoomNode?.ProceedButton;
+        state["can_proceed"] = proceedButton?.IsEnabled == true || canCloseInventory;
 
         return state;
     }

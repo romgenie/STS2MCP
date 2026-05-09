@@ -47,8 +47,8 @@ Serialized card objects in hand, deck, piles, rewards, card selections, and bund
 | `map` | Map navigation | `choose_map_node` |
 | `event` | Event or Ancient encounter | `choose_event_option`, `advance_dialogue` |
 | `rest_site` | Rest site | `choose_rest_option`, `proceed` |
-| `shop` | Shop (auto-opens inventory) | `shop_purchase`, `proceed` |
-| `fake_merchant` | Fake Merchant event (relic-only shop) | `shop_purchase`, `proceed` |
+| `shop` | Shop (auto-opens inventory; `can_proceed` is true when `proceed` can close inventory and leave) | `shop_purchase`, `proceed` |
+| `fake_merchant` | Fake Merchant event (relic-only shop; `can_proceed` follows the same close-inventory behavior) | `shop_purchase`, `proceed` |
 | `treasure` | Treasure room (auto-opens chest) | `claim_treasure_relic`, `proceed` |
 | `card_select` | Deck card selection overlay (transform, upgrade, remove, choose-a-card) | `select_card`, `confirm_selection`, `cancel_selection` |
 | `bundle_select` | Card bundle choice overlay | `select_bundle`, `confirm_bundle_selection`, `cancel_bundle_selection` |
