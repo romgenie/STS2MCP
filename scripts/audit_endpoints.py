@@ -313,6 +313,8 @@ def audit_static_card_glossary_metadata(repo: Path) -> None:
 def audit_static_save_roots(repo: Path) -> None:
     compendium = (repo / "McpMod.Compendium.cs").read_text(encoding="utf-8")
     profile = (repo / "McpMod.Profile.cs").read_text(encoding="utf-8")
+    mcp_server = (repo / "mcp" / "server.py").read_text(encoding="utf-8")
+    mcp_readme = (repo / "mcp" / "README.md").read_text(encoding="utf-8")
     match = re.search(
         r"private static IEnumerable<string> EnumerateSaveRoots\(\).*?\n    private static IEnumerable<string> EnumerateSteamDataRoots\(\)",
         compendium,
@@ -349,6 +351,11 @@ def audit_static_save_roots(repo: Path) -> None:
     for required_fragment in ["profile_id", "progress_path", "profile_root", "save_scope", "current_run", "BuildActiveRunContext"]:
         if required_fragment not in profile_body:
             fail(f"profile endpoint missing identity/run context: {required_fragment}")
+
+    for doc_name, doc_text in [("mcp/server.py", mcp_server), ("mcp/README.md", mcp_readme)]:
+        for required_fragment in ["progress_path", "profile_root", "save_scope", "current_run"]:
+            if required_fragment not in doc_text:
+                fail(f"{doc_name} missing profile/compendium context documentation: {required_fragment}")
     print("saves: multi-account fallback and profile/compendium context enforced")
 
 
@@ -856,6 +863,15 @@ def audit_live(base_url: str) -> None:
     expected = set(EXPECTED_ENDPOINTS)
     if live_index != expected:
         fail(f"root endpoint index mismatch. missing={sorted(expected - live_index)} extra={sorted(live_index - expected)}")
+    endpoint_descriptions = {
+        str(row.get("path")): str(row.get("description"))
+        for row in endpoint_rows
+        if isinstance(row, dict)
+    }
+    for path in ["/api/v1/profile", "/api/v1/compendium"]:
+        description = endpoint_descriptions.get(path, "")
+        if "save/run context" not in description:
+            fail(f"root endpoint index should advertise save/run context for {path}: {description}")
     print(f"root: {len(live_index)} endpoints advertised")
 
     glossary_payloads: dict[str, dict] = {}

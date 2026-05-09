@@ -8,8 +8,8 @@
 | `get_game_state(format?)` | General | Get current game state (`markdown` or `json`) |
 | `menu_select(option, seed?)` | General | Select a visible menu/game-over option, including `abandon_run` when advertised; automatically retries through the multiplayer route during MP runs |
 | `get_settings()` | General | Get current settings and preferences |
-| `get_profile()` | Profiles | Get active profile progress |
-| `get_compendium()` | Profiles | Get Compendium-shaped profile progress |
+| `get_profile()` | Profiles | Get active profile progress plus save/run context |
+| `get_compendium()` | Profiles | Get Compendium-shaped profile progress plus save/run context |
 | `get_bestiary()` | Profiles | Get monster and encounter metadata |
 | `get_glossary_cards()` | Active Pool | Get active-run card pool metadata with run_id/seed scope |
 | `get_glossary_relics()` | Active Pool | Get active-run relic pool metadata with run_id/seed scope |
@@ -45,6 +45,8 @@
 | `crystal_sphere_set_tool(tool)` | Crystal Sphere | Switch the active divination tool |
 | `crystal_sphere_click_cell(x, y)` | Crystal Sphere | Click a hidden cell in the grid |
 | `crystal_sphere_proceed()` | Crystal Sphere | Continue after the minigame finishes |
+
+Profile and Compendium tools include `profile_id`, `progress_path`, `profile_root`, `save_scope`, and `current_run` when a run is active, so callers can distinguish the active profile, save scope, and current run attempt.
 
 Glossary tools require an active run. They include the current character context plus shared run pools such as Colorless cards, shared relics, and shared potions. Card glossary items include energy/star costs, upgrade availability, plus upgraded-preview cost and description. Successful responses include `current_run.run_id`, `current_run.seed`, `kind`, `count`, and `items`. The HTTP endpoints return `run_not_in_progress` with HTTP 409 when called from the main menu.
 
