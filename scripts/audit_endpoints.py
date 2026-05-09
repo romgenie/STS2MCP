@@ -215,6 +215,11 @@ def audit_live(base_url: str) -> None:
     if status != 405:
         fail(f"/api/v1/settings expected HTTP 405 for POST, got {status}: {data}")
 
+    status, data = load_json_url(base_url.rstrip("/") + "/", "POST", b"{}")
+    assert_error_body("/", status, data)
+    if status != 405:
+        fail(f"/ expected HTTP 405 for POST, got {status}: {data}")
+
     print("live: GET endpoint smoke checks passed")
     print("live: state format checks passed")
     print("live: safe POST validation checks passed")

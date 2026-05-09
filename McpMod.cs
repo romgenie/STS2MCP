@@ -271,13 +271,20 @@ public static partial class McpMod
 
             if (path == "/")
             {
-                SendJson(response, new
+                if (request.HttpMethod == "GET")
                 {
-                    message = $"Hello from STS2 MCP v{Version}",
-                    status = "ok",
-                    bound_prefixes = _boundPrefixes,
-                    endpoints = BuildEndpointIndex()
-                });
+                    SendJson(response, new
+                    {
+                        message = $"Hello from STS2 MCP v{Version}",
+                        status = "ok",
+                        bound_prefixes = _boundPrefixes,
+                        endpoints = BuildEndpointIndex()
+                    });
+                }
+                else
+                {
+                    SendError(response, 405, "Method not allowed");
+                }
             }
             else if (path == "/api/v1/singleplayer")
             {
