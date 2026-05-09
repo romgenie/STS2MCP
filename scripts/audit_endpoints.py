@@ -1585,6 +1585,16 @@ def audit_live(base_url: str) -> None:
                 for required_field in required_item_fields:
                     if required_field not in item:
                         fail(f"{path} glossary item missing field {required_field}: {item}")
+                if expected_kind == "cards" and item.get("is_upgradable") is True:
+                    preview_description = item.get("upgrade_preview_description")
+                    if not isinstance(preview_description, str) or not preview_description.strip():
+                        fail(f"{path} upgradable card missing upgrade preview description: {item}")
+                    if "upgrade_preview_cost" not in item:
+                        fail(f"{path} upgradable card missing upgrade preview cost: {item}")
+                    current_level = item.get("current_upgrade_level")
+                    max_level = item.get("max_upgrade_level")
+                    if not isinstance(current_level, int) or not isinstance(max_level, int) or current_level > max_level:
+                        fail(f"{path} upgradable card has invalid upgrade levels: {item}")
             for required_field in ["profile_id", "progress_path", "resolved_progress_path", "profile_root", "save_scope"]:
                 if required_field not in data:
                     fail(f"{path} missing profile/save context field: {required_field}")
