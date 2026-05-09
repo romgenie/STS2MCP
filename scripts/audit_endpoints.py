@@ -358,6 +358,8 @@ def audit_static_error_shapes(repo: Path) -> None:
         fail("docs must describe blocking popup action errors")
     if "action_error" not in docs:
         fail("docs must describe generic action error fallback code")
+    if '"error_code": "action_error"' not in (repo / "docs" / "raw-full.md").read_text(encoding="utf-8"):
+        fail("docs/raw-full.md action error example must include action_error")
     for required_fragment in ["method_not_allowed", "not_found", "internal_error"]:
         if required_fragment not in docs:
             fail(f"docs must describe route-level error code: {required_fragment}")
@@ -966,6 +968,13 @@ def audit_state_surface(repo: Path) -> None:
     )
     if not potion_action_match:
         fail("could not locate ExecuteUsePotion for potion audit")
+    for doc_name, doc_text in [
+        ("docs", docs),
+        ("mcp/server.py", (repo / "mcp" / "server.py").read_text(encoding="utf-8")),
+    ]:
+        for required_fragment in ["combat_id as a string", "valid_targets"]:
+            if required_fragment not in doc_text:
+                fail(f"{doc_name} must document target identifiers for card/potion actions: {required_fragment}")
     potion_action_body = potion_action_match.group(0)
     for required_fragment in [
         "can_use",

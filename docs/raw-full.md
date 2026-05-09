@@ -1211,7 +1211,7 @@ Profile action validation returns structured HTTP errors: invalid profile IDs an
 ## POST — Perform Actions
 
 All POST requests use a JSON body with an `"action"` field and action-specific parameters.
-Action dispatch failures include structured `error_code` values where available. Missing or unknown main-menu `menu_select` options and unknown non-menu actions return HTTP 400; gameplay actions posted with no active run return HTTP 409 with `error_code: "run_not_in_progress"`. Other failed action attempts return non-2xx structured error JSON instead of HTTP 200.
+Action dispatch failures include structured `error_code` values. Missing or unknown main-menu `menu_select` options and unknown non-menu actions return HTTP 400; gameplay actions posted with no active run return HTTP 409 with `error_code: "run_not_in_progress"`. Older generic action failures use the stable fallback `error_code: "action_error"`. Other failed action attempts return non-2xx structured error JSON instead of HTTP 200.
 If a tutorial or blocking popup is visible during a run, gameplay actions return HTTP 409 with `error_code: "blocking_popup_active"`; use the advertised `menu_select` option to dismiss or answer it first.
 
 ### Success Response
@@ -1223,7 +1223,11 @@ If a tutorial or blocking popup is visible during a run, gameplay actions return
 ### Error Response
 
 ```jsonc
-{ "status": "error", "error": "Card requires a target. Provide 'target' with an entity_id." }
+{
+  "status": "error",
+  "error": "Card requires a target. Provide 'target' with an entity_id.",
+  "error_code": "action_error"
+}
 ```
 
 ---
@@ -1261,7 +1265,7 @@ Play a card from hand during combat.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `card_index` | int | Yes | 0-based index in hand |
-| `target` | string | When hand card `requires_target` is true | `entity_id` from the card's `valid_targets` list |
+| `target` | string | When hand card `requires_target` is true | `entity_id` from the card's `valid_targets` list, or the target combat_id as a string |
 
 **Errors:** Not in combat, not play phase, card unplayable, invalid index, missing target.
 
@@ -1278,7 +1282,7 @@ Use a potion from the potion belt.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `slot` | int | Yes | Potion slot index |
-| `target` | string | For `AnyEnemy` potions | `entity_id` of the target enemy |
+| `target` | string | For `AnyEnemy` potions | `entity_id` of the target enemy, or the target combat_id as a string |
 
 **Errors:** Empty slot, combat-only potion used outside combat, automatic potion, already queued, player dead, custom usability blocked, missing/invalid target, enemy-targeted potion outside combat.
 

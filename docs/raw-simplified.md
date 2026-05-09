@@ -140,8 +140,8 @@ Profile action validation uses non-2xx HTTP status codes: invalid profile IDs an
 
 | Action | Parameters | When to Use |
 |---|---|---|
-| `play_card` | `card_index`: int, `target`?: string | Play a card from hand when `can_play` is true. `target` is required when the card has `requires_target`; use one of `valid_targets`. |
-| `use_potion` | `slot`: int, `target`?: string | Use a potion when its state says `can_use`. `target` required for enemy-targeting potions; use one of `valid_targets`. Works outside combat for non-combat-only, non-enemy-targeting potions. |
+| `play_card` | `card_index`: int, `target`?: string | Play a card from hand when `can_play` is true. `target` is required when the card has `requires_target`; use a `valid_targets` `entity_id`, or its combat_id as a string. |
+| `use_potion` | `slot`: int, `target`?: string | Use a potion when its state says `can_use`. `target` required for enemy-targeting potions; use a `valid_targets` `entity_id`, or its combat_id as a string. Works outside combat for non-combat-only, non-enemy-targeting potions. |
 | `discard_potion` | `slot`: int | Discard a potion when its state says `can_discard`. Use when slots are full and you need room for incoming potions. |
 | `end_turn` | _(none)_ | End the player's turn when battle state says `can_end_turn`. |
 
