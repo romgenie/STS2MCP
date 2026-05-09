@@ -31,6 +31,10 @@ def _profile_url() -> str:
     return f"{_base_url}/api/v1/profile"
 
 
+def _compendium_url() -> str:
+    return f"{_base_url}/api/v1/compendium"
+
+
 def _profiles_url() -> str:
     return f"{_base_url}/api/v1/profiles"
 
@@ -68,6 +72,12 @@ async def _mp_post(body: dict) -> str:
 
 async def _profile_get() -> str:
     r = await _get_client().get(_profile_url())
+    r.raise_for_status()
+    return r.text
+
+
+async def _compendium_get() -> str:
+    r = await _get_client().get(_compendium_url())
     r.raise_for_status()
     return r.text
 
@@ -195,6 +205,21 @@ async def get_profile() -> str:
     """
     try:
         return await _profile_get()
+    except Exception as e:
+        return _handle_error(e)
+
+
+@mcp.tool()
+async def get_compendium() -> str:
+    """Get the active profile's Compendium-shaped progress summary.
+
+    Mirrors the visible Compendium cards: Card Library, Relic Collection,
+    Potion Lab, Bestiary, Character Stats, and Run History. Some sections point
+    to detail endpoints such as glossary or bestiary when model-level metadata is
+    separate from profile discovery/progress data.
+    """
+    try:
+        return await _compendium_get()
     except Exception as e:
         return _handle_error(e)
 
