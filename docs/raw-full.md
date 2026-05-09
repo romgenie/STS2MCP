@@ -8,6 +8,7 @@ HTTP API served by the STS2_MCP mod on `localhost:15526`. No authentication. Loc
 - `GET  /api/v1/multiplayer` — read multiplayer game state
 - `POST /api/v1/multiplayer` — perform a multiplayer action
 - `GET  /api/v1/profile` — read current profile progress
+- `GET  /api/v1/compendium` — read Compendium-shaped profile progress
 - `GET  /api/v1/profiles` — list profile slots
 - `POST /api/v1/profiles` — switch or delete profile slots
 
@@ -875,6 +876,43 @@ Profile endpoints are independent of the singleplayer and multiplayer run endpoi
 ### `GET /api/v1/profile`
 
 Returns the active profile's persistent progress summary, including character stats, card stats, encounter stats, discovered content, achievements, epochs, and global totals.
+
+### `GET /api/v1/compendium`
+
+Returns the active profile's progress grouped by the in-game Compendium cards:
+
+- `card_library`: discovered card IDs and card pick/skip/win/loss stats. Detailed card metadata lives at `/api/v1/glossary/cards`, which currently requires a run context.
+- `relic_collection`: discovered relic IDs. Detailed relic metadata lives at `/api/v1/glossary/relics`, which currently requires a run context.
+- `potion_lab`: discovered potion IDs. Detailed potion metadata lives at `/api/v1/glossary/potions`, which currently requires a run context.
+- `bestiary`: profile encounter/enemy fight stats plus a pointer to `/api/v1/bestiary` for reflected model metadata. The in-game Bestiary card is currently marked future/locked.
+- `character_stats`: per-character and global profile totals.
+- `run_history`: summaries of the active profile's saved `saves/history/*.run` files. If more than 20 files exist, the response includes the 20 most recent entries and the local `history_path`.
+
+```jsonc
+{
+  "profile_id": 1,
+  "sections": {
+    "card_library": { "status": "exposed", "discovered_ids": ["BASH"], "stats": [] },
+    "relic_collection": { "status": "partially_exposed", "discovered_ids": ["BURNING_BLOOD"] },
+    "potion_lab": { "status": "partially_exposed", "discovered_ids": [] },
+    "bestiary": { "status": "locked_in_ui", "detail_endpoint": "/api/v1/bestiary" },
+    "character_stats": { "status": "exposed", "characters": [], "global": {} },
+    "run_history": {
+      "status": "exposed",
+      "entry_count": 10,
+      "entries": [
+        {
+          "id": "1774869148",
+          "players": [{ "id": 1, "character": "CHARACTER.IRONCLAD" }],
+          "ascension": 0,
+          "win": false,
+          "run_time": 6541
+        }
+      ]
+    }
+  }
+}
+```
 
 ### `GET /api/v1/profiles`
 

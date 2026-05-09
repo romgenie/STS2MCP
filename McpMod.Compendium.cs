@@ -1,0 +1,437 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Reflection;
+using System.Text.Json;
+using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.Saves.Managers;
+
+namespace STS2_MCP;
+
+public static partial class McpMod
+{
+    private static void HandleGetCompendium(HttpListenerResponse response)
+    {
+        try
+        {
+            var dataTask = RunOnMainThread(BuildCompendium);
+            SendJson(response, dataTask.GetAwaiter().GetResult());
+        }
+        catch (Exception ex)
+        {
+            SendError(response, 500, $"Failed to build compendium: {ex.Message}");
+        }
+    }
+
+    internal static object BuildCompendium()
+    {
+        var progress = SaveManager.Instance?.Progress;
+        var saveManager = SaveManager.Instance;
+        if (progress == null || saveManager == null)
+            return new Dictionary<string, object?> { ["error"] = "No profile data available." };
+
+        var cardStats = progress.CardStats.Select(kv => new Dictionary<string, object?>
+        {
+            ["id"] = kv.Key.Entry,
+            ["times_picked"] = kv.Value.TimesPicked,
+            ["times_skipped"] = kv.Value.TimesSkipped,
+            ["times_won"] = kv.Value.TimesWon,
+            ["times_lost"] = kv.Value.TimesLost
+        }).ToList();
+
+        var characterStats = progress.CharacterStats.Select(kv => new Dictionary<string, object?>
+        {
+            ["id"] = kv.Key.Entry,
+            ["max_ascension"] = kv.Value.MaxAscension,
+            ["preferred_ascension"] = kv.Value.PreferredAscension,
+            ["total_wins"] = kv.Value.TotalWins,
+            ["total_losses"] = kv.Value.TotalLosses,
+            ["fastest_win_time"] = kv.Value.FastestWinTime,
+            ["best_win_streak"] = kv.Value.BestWinStreak,
+            ["current_win_streak"] = kv.Value.CurrentWinStreak,
+            ["playtime"] = kv.Value.Playtime
+        }).ToList();
+
+        var runHistory = BuildRunHistorySection(progress, saveManager.CurrentProfileId);
+
+        return new Dictionary<string, object?>
+        {
+            ["profile_id"] = saveManager.CurrentProfileId,
+            ["source"] = "SaveManager.Progress plus model metadata endpoints",
+            ["sections"] = new Dictionary<string, object?>
+            {
+                ["card_library"] = new Dictionary<string, object?>
+                {
+                    ["ui_label"] = "Card Library",
+                    ["status"] = "exposed",
+                    ["source"] = "/api/v1/profile card_stats and discovered_cards",
+                    ["detail_endpoint"] = "/api/v1/glossary/cards",
+                    ["detail_endpoint_requires_run"] = true,
+                    ["discovered_ids"] = progress.DiscoveredCards.Select(id => id.Entry).ToList(),
+                    ["stats"] = cardStats
+                },
+                ["relic_collection"] = new Dictionary<string, object?>
+                {
+                    ["ui_label"] = "Relic Collection",
+                    ["status"] = "partially_exposed",
+                    ["source"] = "/api/v1/profile discovered_relics",
+                    ["detail_endpoint"] = "/api/v1/glossary/relics",
+                    ["detail_endpoint_requires_run"] = true,
+                    ["discovered_ids"] = progress.DiscoveredRelics.Select(id => id.Entry).ToList(),
+                    ["limitation"] = "Profile exposes discovered relic IDs; per-relic obtained counts are not exposed by a typed API here."
+                },
+                ["potion_lab"] = new Dictionary<string, object?>
+                {
+                    ["ui_label"] = "Potion Lab",
+                    ["status"] = "partially_exposed",
+                    ["source"] = "/api/v1/profile discovered_potions",
+                    ["detail_endpoint"] = "/api/v1/glossary/potions",
+                    ["detail_endpoint_requires_run"] = true,
+                    ["discovered_ids"] = progress.DiscoveredPotions.Select(id => id.Entry).ToList(),
+                    ["limitation"] = "Profile exposes discovered potion IDs; per-potion lab UI metadata is not exposed by a typed API here."
+                },
+                ["bestiary"] = new Dictionary<string, object?>
+                {
+                    ["ui_label"] = "Bestiary",
+                    ["status"] = "locked_in_ui",
+                    ["source"] = "/api/v1/bestiary model metadata",
+                    ["detail_endpoint"] = "/api/v1/bestiary",
+                    ["encounter_stats"] = BuildEncounterStats(progress),
+                    ["enemy_stats"] = BuildEnemyStats(progress),
+                    ["limitation"] = "The current game UI labels Bestiary as future/locked; the endpoint exposes reflected model metadata and profile fight stats when available."
+                },
+                ["character_stats"] = new Dictionary<string, object?>
+                {
+                    ["ui_label"] = "Character Stats",
+                    ["status"] = "exposed",
+                    ["source"] = "/api/v1/profile characters and global totals",
+                    ["characters"] = characterStats,
+                    ["global"] = new Dictionary<string, object?>
+                    {
+                        ["total_playtime"] = progress.TotalPlaytime,
+                        ["total_unlocks"] = progress.TotalUnlocks,
+                        ["current_score"] = progress.CurrentScore,
+                        ["floors_climbed"] = progress.FloorsClimbed,
+                        ["architect_damage"] = progress.ArchitectDamage,
+                        ["total_wins"] = progress.Wins,
+                        ["total_losses"] = progress.Losses,
+                        ["fastest_victory"] = progress.FastestVictory,
+                        ["best_win_streak"] = progress.BestWinStreak,
+                        ["number_of_runs"] = progress.NumberOfRuns
+                    }
+                },
+                ["run_history"] = runHistory
+            }
+        };
+    }
+
+    private static List<Dictionary<string, object?>> BuildEncounterStats(dynamic progress)
+    {
+        var result = new List<Dictionary<string, object?>>();
+        foreach (var kv in progress.EncounterStats)
+            result.Add(BuildFightStatsEntry(kv.Key.Entry, kv.Value));
+        return result;
+    }
+
+    private static List<Dictionary<string, object?>> BuildEnemyStats(dynamic progress)
+    {
+        var result = new List<Dictionary<string, object?>>();
+        foreach (var kv in progress.EnemyStats)
+            result.Add(BuildFightStatsEntry(kv.Key.Entry, kv.Value));
+        return result;
+    }
+
+    private static Dictionary<string, object?> BuildFightStatsEntry(string id, dynamic stats)
+    {
+        var entry = new Dictionary<string, object?>
+        {
+            ["id"] = id,
+            ["total_wins"] = stats.TotalWins,
+            ["total_losses"] = stats.TotalLosses
+        };
+
+        var byCharacter = new List<Dictionary<string, object?>>();
+        foreach (var fs in stats.FightStats)
+        {
+            byCharacter.Add(new Dictionary<string, object?>
+            {
+                ["character"] = fs.Character.Entry,
+                ["wins"] = fs.Wins,
+                ["losses"] = fs.Losses
+            });
+        }
+        if (byCharacter.Count > 0)
+            entry["by_character"] = byCharacter;
+
+        return entry;
+    }
+
+    private static Dictionary<string, object?> BuildRunHistorySection(object progress, int profileId)
+    {
+        var members = progress.GetType()
+            .GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(member => member.Name.Contains("RunHistory", StringComparison.OrdinalIgnoreCase)
+                || member.Name.Contains("RunHistories", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var values = new Dictionary<string, object?>();
+        foreach (var member in members)
+        {
+            try
+            {
+                object? value = member switch
+                {
+                    PropertyInfo property when property.GetIndexParameters().Length == 0 => property.GetValue(progress),
+                    FieldInfo field => field.GetValue(progress),
+                    _ => null
+                };
+                if (value != null)
+                    values[member.Name] = ToJsonSafe(value, 0, 50);
+            }
+            catch { }
+        }
+
+        var historyDirectory = FindRunHistoryDirectory(profileId);
+        if (historyDirectory != null)
+        {
+            var files = Directory.GetFiles(historyDirectory, "*.run")
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .ToList();
+
+            return new Dictionary<string, object?>
+            {
+                ["ui_label"] = "Run History",
+                ["status"] = files.Count > 0 ? "exposed" : "exposed_empty",
+                ["source"] = "Profile save history files",
+                ["history_path"] = historyDirectory,
+                ["entry_count"] = files.Count,
+                ["entries"] = files.Take(20).Select(BuildRunHistoryEntry).ToList(),
+                ["progress_members"] = values.Count > 0 ? values : null,
+                ["limitation"] = files.Count > 20
+                    ? "Only the 20 most recent run files are summarized; use history_path to inspect older local run files."
+                    : "Run history is summarized from the active profile's saved .run files."
+            };
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["ui_label"] = "Run History",
+            ["status"] = values.Count > 0 ? "partially_exposed" : "exposed_empty",
+            ["source"] = "SaveManager.Progress reflected run-history members",
+            ["entries"] = values,
+            ["limitation"] = values.Count > 0
+                ? "Run history is serialized from discovered progress members and capped for response size."
+                : "No run-history files or typed run-history members were found for the active profile."
+        };
+    }
+
+    private static Dictionary<string, object?> BuildRunHistoryEntry(FileInfo file)
+    {
+        var entry = new Dictionary<string, object?>
+        {
+            ["id"] = Path.GetFileNameWithoutExtension(file.Name),
+            ["file_name"] = file.Name,
+            ["size_bytes"] = file.Length,
+            ["last_write_time_utc"] = file.LastWriteTimeUtc
+        };
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(file.FullName));
+            var root = document.RootElement;
+
+            CopyJsonScalar(root, entry, "start_time");
+            CopyJsonScalar(root, entry, "run_time");
+            CopyJsonScalar(root, entry, "game_mode");
+            CopyJsonScalar(root, entry, "ascension");
+            CopyJsonScalar(root, entry, "win");
+            CopyJsonScalar(root, entry, "was_abandoned");
+            CopyJsonScalar(root, entry, "killed_by_encounter");
+            CopyJsonScalar(root, entry, "killed_by_event");
+            CopyJsonScalar(root, entry, "seed");
+            CopyJsonScalar(root, entry, "build_id");
+
+            if (root.TryGetProperty("acts", out var acts) && acts.ValueKind == JsonValueKind.Array)
+                entry["acts"] = acts.EnumerateArray().Select(GetJsonValue).ToList();
+
+            if (root.TryGetProperty("players", out var players) && players.ValueKind == JsonValueKind.Array)
+            {
+                entry["players"] = players.EnumerateArray().Select(player =>
+                {
+                    var playerEntry = new Dictionary<string, object?>();
+                    CopyJsonScalar(player, playerEntry, "id");
+                    CopyJsonScalar(player, playerEntry, "character");
+                    if (player.TryGetProperty("deck", out var deck) && deck.ValueKind == JsonValueKind.Array)
+                        playerEntry["deck_count"] = deck.GetArrayLength();
+                    if (player.TryGetProperty("relics", out var relics) && relics.ValueKind == JsonValueKind.Array)
+                        playerEntry["relic_count"] = relics.GetArrayLength();
+                    if (player.TryGetProperty("potions", out var potions) && potions.ValueKind == JsonValueKind.Array)
+                        playerEntry["potion_count"] = potions.GetArrayLength();
+                    return playerEntry;
+                }).ToList();
+            }
+
+            entry["map_point_count"] = CountMapPoints(root);
+        }
+        catch (Exception ex)
+        {
+            entry["parse_error"] = ex.Message;
+        }
+
+        return entry;
+    }
+
+    private static int CountMapPoints(JsonElement root)
+    {
+        if (!root.TryGetProperty("map_point_history", out var acts) || acts.ValueKind != JsonValueKind.Array)
+            return 0;
+
+        var count = 0;
+        foreach (var act in acts.EnumerateArray())
+        {
+            if (act.ValueKind == JsonValueKind.Array)
+                count += act.GetArrayLength();
+        }
+        return count;
+    }
+
+    private static void CopyJsonScalar(JsonElement source, Dictionary<string, object?> target, string propertyName)
+    {
+        if (source.TryGetProperty(propertyName, out var property))
+            target[propertyName] = GetJsonValue(property);
+    }
+
+    private static object? GetJsonValue(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number when element.TryGetInt64(out var longValue) => longValue,
+            JsonValueKind.Number when element.TryGetDouble(out var doubleValue) => doubleValue,
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => element.ToString()
+        };
+    }
+
+    private static string? FindRunHistoryDirectory(int profileId)
+    {
+        var progressPath = GetProfileProgressPath(profileId);
+        var profileRoot = GetProfileRootFromProgressPath(progressPath, profileId);
+
+        foreach (var saveRoot in EnumerateSaveRoots())
+        {
+            var historyPath = Path.Combine(saveRoot, profileRoot, "saves", "history");
+            if (Directory.Exists(historyPath))
+                return historyPath;
+        }
+
+        return null;
+    }
+
+    private static string GetProfileRootFromProgressPath(string? progressPath, int profileId)
+    {
+        var normalized = progressPath?.Replace('\\', '/');
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            var marker = $"/profile{profileId}/";
+            var index = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (index >= 0)
+                return normalized[..(index + marker.Length - 1)];
+
+            if (normalized.StartsWith($"profile{profileId}/", StringComparison.OrdinalIgnoreCase))
+                return $"profile{profileId}";
+            if (normalized.StartsWith($"modded/profile{profileId}/", StringComparison.OrdinalIgnoreCase))
+                return $"modded/profile{profileId}";
+        }
+
+        return $"profile{profileId}";
+    }
+
+    private static IEnumerable<string> EnumerateSaveRoots()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        if (string.IsNullOrWhiteSpace(appData))
+            yield break;
+
+        var steamRoot = Path.Combine(appData, "SlayTheSpire2", "steam");
+        if (!Directory.Exists(steamRoot))
+            yield break;
+
+        foreach (var accountRoot in Directory.GetDirectories(steamRoot))
+            yield return accountRoot;
+    }
+
+    private static string? GetProfileProgressPath(int profileId)
+    {
+        try { return ProgressSaveManager.GetProgressPathForProfile(profileId); }
+        catch { return null; }
+    }
+
+    private static string? ResolveProfileProgressPath(int profileId)
+    {
+        var progressPath = GetProfileProgressPath(profileId);
+        var profileRoot = GetProfileRootFromProgressPath(progressPath, profileId);
+
+        foreach (var saveRoot in EnumerateSaveRoots())
+        {
+            var absolutePath = Path.Combine(saveRoot, profileRoot, "saves", "progress.save");
+            if (File.Exists(absolutePath))
+                return absolutePath;
+        }
+
+        return progressPath;
+    }
+
+    private static object? ToJsonSafe(object? value, int depth, int maxItems)
+    {
+        if (value == null || depth > 4) return value?.ToString();
+        if (value is string or bool or byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal)
+            return value;
+        if (value is Enum) return value.ToString();
+
+        var type = value.GetType();
+        var entryProperty = type.GetProperty("Entry", BindingFlags.Instance | BindingFlags.Public);
+        if (entryProperty?.GetValue(value) is string entry)
+            return entry;
+
+        if (value is IDictionary dictionary)
+        {
+            var result = new Dictionary<string, object?>();
+            var count = 0;
+            foreach (DictionaryEntry item in dictionary)
+            {
+                if (count++ >= maxItems) break;
+                result[item.Key?.ToString() ?? "null"] = ToJsonSafe(item.Value, depth + 1, maxItems);
+            }
+            return result;
+        }
+
+        if (value is IEnumerable enumerable && value is not string)
+        {
+            var result = new List<object?>();
+            var count = 0;
+            foreach (var item in enumerable)
+            {
+                if (count++ >= maxItems) break;
+                result.Add(ToJsonSafe(item, depth + 1, maxItems));
+            }
+            return result;
+        }
+
+        var obj = new Dictionary<string, object?>();
+        foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (property.GetIndexParameters().Length != 0)
+                continue;
+            try { obj[property.Name] = ToJsonSafe(property.GetValue(value), depth + 1, maxItems); }
+            catch { }
+        }
+        return obj.Count > 0 ? obj : value.ToString();
+    }
+}
