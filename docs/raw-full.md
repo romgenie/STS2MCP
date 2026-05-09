@@ -604,6 +604,7 @@ Shop inventory is auto-opened when state is queried.
         "card_star_cost": null,    // Regent star cost as string, null if N/A
         "card_rarity": "Rare",
         "card_description": "Lose 6 HP. Gain 2 Energy. Draw 3 cards.",
+        "card_is_upgraded": false,
         "keywords": [ /* Keyword Objects */ ]
       },
       // Relic entry

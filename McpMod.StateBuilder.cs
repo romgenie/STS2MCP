@@ -1555,6 +1555,7 @@ public static partial class McpMod
                 item["card_star_cost"] = cardInfo["star_cost"];
                 item["card_rarity"] = cardInfo["rarity"];
                 item["card_description"] = cardInfo["description"];
+                item["card_is_upgraded"] = cardInfo["is_upgraded"];
                 item["keywords"] = cardInfo["keywords"];
             }
             items.Add(item);
