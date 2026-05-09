@@ -473,7 +473,7 @@ public static partial class McpMod
             GD.PrintErr($"[STS2 MCP] HandleGetMultiplayerState: {ex}");
             try
             {
-                SendError(response, 500, $"Failed to read multiplayer game state: {ex.Message}");
+                SendError(response, 500, $"Failed to read multiplayer game state: {ex.Message}", "multiplayer_state_read_failed");
             }
             catch { /* response may be unusable */ }
         }
@@ -575,7 +575,7 @@ public static partial class McpMod
             GD.PrintErr($"[STS2 MCP] HandleGetState: {ex}");
             try
             {
-                SendError(response, 500, $"Failed to read game state: {ex.Message}");
+                SendError(response, 500, $"Failed to read game state: {ex.Message}", "singleplayer_state_read_failed");
             }
             catch { /* response may be unusable */ }
         }

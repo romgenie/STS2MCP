@@ -29,7 +29,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to build compendium: {ex.Message}");
+            SendError(response, 500, $"Failed to build compendium: {ex.Message}", "compendium_build_failed");
         }
     }
 

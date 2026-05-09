@@ -29,7 +29,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to read settings: {ex.Message}");
+            SendError(response, 500, $"Failed to read settings: {ex.Message}", "settings_read_failed");
         }
     }
 
@@ -93,7 +93,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to build bestiary: {ex.Message}");
+            SendError(response, 500, $"Failed to build bestiary: {ex.Message}", "bestiary_build_failed");
         }
     }
 
@@ -106,7 +106,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
+            SendError(response, 500, $"Failed to build glossary: {ex.Message}", "glossary_build_failed");
         }
     }
 
@@ -119,7 +119,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
+            SendError(response, 500, $"Failed to build glossary: {ex.Message}", "glossary_build_failed");
         }
     }
 
@@ -132,7 +132,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
+            SendError(response, 500, $"Failed to build glossary: {ex.Message}", "glossary_build_failed");
         }
     }
 
@@ -145,7 +145,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to build glossary: {ex.Message}");
+            SendError(response, 500, $"Failed to build glossary: {ex.Message}", "glossary_build_failed");
         }
     }
 

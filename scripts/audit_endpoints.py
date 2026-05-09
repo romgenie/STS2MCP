@@ -231,6 +231,15 @@ def audit_static_error_shapes(repo: Path) -> None:
 
     if raw_error_writes:
         fail(f"500 handlers should use SendError for structured error bodies: {sorted(raw_error_writes)}")
+    uncoded_500s: list[str] = []
+    for path in repo.glob("McpMod*.cs"):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"SendError\([^;]*,\s*500\s*,[^;]*\);", text, re.S):
+            if match.group(0).count(",") < 3:
+                uncoded_500s.append(path.name)
+                break
+    if uncoded_500s:
+        fail(f"500 handlers should include explicit error_code values: {sorted(uncoded_500s)}")
     fork_endpoints = (repo / "McpMod.ForkEndpoints.cs").read_text(encoding="utf-8")
     settings_match = re.search(
         r"internal static object BuildSettings\(\).*?\n    private static void HandleGetBestiary",
@@ -254,6 +263,27 @@ def audit_static_error_shapes(repo: Path) -> None:
     for required_fragment in ["SendMethodNotAllowed", "method_not_allowed", "SendNotFound", "not_found", "internal_error"]:
         if required_fragment not in mcp_mod:
             fail(f"route errors missing structured error code: {required_fragment}")
+    read_failure_codes = [
+        "settings_read_failed",
+        "bestiary_build_failed",
+        "glossary_build_failed",
+        "profile_build_failed",
+        "profiles_read_failed",
+        "compendium_build_failed",
+        "singleplayer_state_read_failed",
+        "multiplayer_state_read_failed",
+    ]
+    read_failure_sources = "\n".join(
+        [
+            mcp_mod,
+            fork_endpoints,
+            (repo / "McpMod.Profile.cs").read_text(encoding="utf-8"),
+            (repo / "McpMod.Compendium.cs").read_text(encoding="utf-8"),
+        ]
+    )
+    for required_fragment in read_failure_codes:
+        if required_fragment not in read_failure_sources:
+            fail(f"read endpoints missing structured failure error code: {required_fragment}")
     profile = (repo / "McpMod.Profile.cs").read_text(encoding="utf-8")
     validation_codes = [
         "invalid_json",
@@ -301,6 +331,9 @@ def audit_static_error_shapes(repo: Path) -> None:
     for required_fragment in ["save_manager_unavailable", "settings_data_unavailable", "profile_data_unavailable"]:
         if required_fragment not in docs:
             fail(f"docs must describe read endpoint availability error code: {required_fragment}")
+    for required_fragment in read_failure_codes:
+        if required_fragment not in docs:
+            fail(f"docs must describe read endpoint failure error code: {required_fragment}")
     for required_fragment in validation_codes:
         if required_fragment not in docs:
             fail(f"docs must describe POST validation error code: {required_fragment}")

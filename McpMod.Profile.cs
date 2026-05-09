@@ -24,7 +24,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to build profile: {ex.Message}");
+            SendError(response, 500, $"Failed to build profile: {ex.Message}", "profile_build_failed");
         }
     }
 
@@ -37,7 +37,7 @@ public static partial class McpMod
         }
         catch (Exception ex)
         {
-            SendError(response, 500, $"Failed to get profiles: {ex.Message}");
+            SendError(response, 500, $"Failed to get profiles: {ex.Message}", "profiles_read_failed");
         }
     }
 

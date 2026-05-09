@@ -62,6 +62,8 @@ Route-level failures preserve endpoint `error_code` values such as `method_not_a
 
 Read endpoint startup/data-availability failures preserve endpoint `error_code` values such as `save_manager_unavailable`, `settings_data_unavailable`, and `profile_data_unavailable`.
 
+Read endpoint exceptions preserve endpoint-specific `error_code` values such as `settings_read_failed`, `bestiary_build_failed`, `glossary_build_failed`, `profile_build_failed`, `profiles_read_failed`, `compendium_build_failed`, `singleplayer_state_read_failed`, and `multiplayer_state_read_failed`.
+
 Menu/action dispatch failures also use structured endpoint errors where available: missing or unknown main-menu selections and unknown actions return HTTP 400, gameplay actions sent without an active run return HTTP 409, and blocking tutorial/popup overlays return HTTP 409 with `error_code: blocking_popup_active`. Other failed actions return non-2xx structured error JSON instead of HTTP 200. MCP wrappers preserve those structured JSON error bodies and add `http_status` so callers can handle endpoint failures without parsing a flat text prefix.
 
 Glossary tools require an active run. They include the current character context plus shared run pools such as Colorless cards, shared relics, and shared potions. Card glossary items include energy/star costs, upgrade availability, plus upgraded-preview cost and description. Successful responses include `profile_id`, `progress_path`, `resolved_progress_path`, `profile_root`, `save_scope`, `current_run.run_id`, `current_run.seed`, `kind`, `count`, and `items`. The HTTP endpoints return `run_not_in_progress` with HTTP 409 when called from the main menu, while still including the active profile/save context fields.
