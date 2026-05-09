@@ -403,7 +403,17 @@ Appears when a card effect prompts "Select a card to exhaust/discard/upgrade". *
       }
     ],
     "selected_cards": [          // Only present if cards have been selected
-      { "index": 0, "name": "Defend" }
+      {
+        "index": 0,
+        "id": "DEFEND_R",
+        "name": "Defend",
+        "type": "Skill",
+        "cost": "1",
+        "star_cost": null,
+        "description": "Gain 5 Block.",
+        "is_upgraded": false,
+        "keywords": [ /* Keyword Objects */ ]
+      }
     ],
     "can_confirm": false
   },

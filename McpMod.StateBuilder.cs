@@ -2045,11 +2045,10 @@ public static partial class McpMod
             {
                 var card = holder.CardModel;
                 if (card == null) continue;
-                selectedCards.Add(new Dictionary<string, object?>
-                {
-                    ["index"] = selIdx,
-                    ["name"] = SafeGetText(() => card.Title)
-                });
+                var cardInfo = BuildCardInfo(card);
+                cardInfo["index"] = selIdx;
+                cardInfo["description"] = SafeGetCardDescription(card);
+                selectedCards.Add(cardInfo);
                 selIdx++;
             }
             if (selectedCards.Count > 0)
