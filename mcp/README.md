@@ -4,7 +4,8 @@
 
 | Tool | Scope | Description |
 |---|---|---|
-| `get_game_state(format?)` | General | Get current game state (`markdown` or `json`) |
+| `get_game_state(format?, wait_for_actionable?, wait_timeout?, poll_interval?)` | General | Get current game state (`markdown` or `json`), optionally waiting through transient non-actionable states |
+| `log_agent_decision(summary, reasoning?, intended_action?, alternatives?, confidence?, tags?)` | General | Add a structured decision annotation to the run log |
 | `menu_select(option, seed?)` | General | Select a visible menu/game-over option |
 | `get_profile()` | Profiles | Get active profile progress |
 | `list_profiles()` | Profiles | List profile slots and active slot |
@@ -44,7 +45,7 @@ All multiplayer tools are prefixed with `mp_`. They route through `/api/v1/multi
 
 | Tool | Scope | Description |
 |---|---|---|
-| `mp_get_game_state(format?)` | General | Get multiplayer game state (all players, votes, bids) |
+| `mp_get_game_state(format?, wait_for_actionable?, wait_timeout?, poll_interval?)` | General | Get multiplayer game state (all players, votes, bids), optionally waiting through transient non-actionable states |
 | `mp_combat_play_card(card_index, target?)` | Combat | Play a card from the local player's hand |
 | `mp_combat_end_turn()` | Combat | Submit end-turn vote (turn ends when all players submit) |
 | `mp_combat_undo_end_turn()` | Combat | Retract end-turn vote |
@@ -73,3 +74,40 @@ All multiplayer tools are prefixed with `mp_`. They route through `/api/v1/multi
 | `mp_crystal_sphere_set_tool(tool)` | Crystal Sphere | Switch the active divination tool |
 | `mp_crystal_sphere_click_cell(x, y)` | Crystal Sphere | Click a hidden cell in the grid |
 | `mp_crystal_sphere_proceed()` | Crystal Sphere | Continue after the minigame finishes |
+
+## Run Logging
+
+The MCP bridge writes structured JSONL logs by default under `logs/run_<timestamp>-<id>.jsonl` relative to the server working directory. Each line has a stable envelope with `schema_version`, `run_id`, `sequence`, UTC `timestamp`, `monotonic_ms`, `event_type`, and when applicable `tool_call_id` / `tool_name`.
+
+Logged events include:
+
+- `session_start` with bridge configuration and runtime metadata.
+- `tool_call_start`, `tool_call_result`, and `tool_call_error` for every MCP tool.
+- `http_request`, `http_response`, and `http_error` for calls to the STS2_MCP REST API.
+- `state_poll` and `state_poll_final_format` for smart polling decisions.
+- `agent_decision` entries from `log_agent_decision`.
+
+Tool and HTTP results include length, byte count, SHA-256, preview text, and truncation status. Keys containing `authorization`, `cookie`, `password`, `secret`, `token`, `api_key`, or `apikey` are redacted before writing.
+
+Logging options:
+
+```bash
+python server.py --log-dir logs
+python server.py --disable-run-log
+python server.py --log-preview-chars 8000
+python server.py --log-full-text
+```
+
+`STS2_MCP_LOG_DIR` can also set the default log directory. Use `--log-full-text` when you need complete replayable tool/API text for evaluation; otherwise previews plus hashes keep the log smaller while preserving integrity checks.
+
+## Smart State Polling
+
+`get_game_state` and `mp_get_game_state` default to `wait_for_actionable=true`. The bridge polls JSON state until one of these conditions is met, then returns the requested format:
+
+- combat reaches the player's play phase;
+- event dialogue/options are available;
+- reward, rest, shop, treasure, or Crystal Sphere controls are actionable;
+- another non-transient state is reached;
+- `wait_timeout` expires.
+
+Set `wait_for_actionable=false` to get the immediate raw state. `wait_timeout` is capped at 60 seconds and `poll_interval` is capped between 0.1 and 5 seconds.
