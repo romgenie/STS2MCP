@@ -114,6 +114,8 @@ All POST requests use JSON body with `"action"` field. All responses include `{ 
 
 ### Map (`map`)
 
+`map.boss` includes the upcoming boss coordinate plus stable `id` and readable `name` fields when the run map exposes boss identity. `map.bosses` contains all boss entries for maps with more than one boss.
+
 | Action | Parameters | When to Use |
 |---|---|---|
 | `choose_map_node` | `index`: int | Travel to a node from `next_options`. |
